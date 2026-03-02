@@ -16,16 +16,43 @@
 set -e
 
 
-# Variables (can be overridden by environment variables)
-RESOURCE_GROUP="${RESOURCE_GROUP:-rg-demo-eastus2}"
-STORAGE_ACCOUNT="${STORAGE_ACCOUNT:-stdldemoeastus2}"
-FILESYSTEM="${FILESYSTEM:-fsdleastus2}"
-NUM_FILES="${NUM_FILES:-5}"
+
+# Variables (can be overridden by arguments)
+RESOURCE_GROUP="rg-demo-eastus2"
+STORAGE_ACCOUNT="stdldemoeastus2"
+FILESYSTEM="fsdleastus2"
+NUM_FILES=5
+FILE_SIZE="1K"  # Default file size (1K = 1024 bytes)
+
+# Usage info
+usage() {
+  echo "Usage: $0 [-n NUM_FILES] [-s FILE_SIZE] [-g RESOURCE_GROUP] [-a STORAGE_ACCOUNT] [-y FILESYSTEM]"
+  echo "  -n NUM_FILES        Number of files to create (default: 5)"
+  echo "  -s FILE_SIZE        Size of each file (e.g., 1K, 10M, 1G; default: 1K)"
+  echo "  -g RESOURCE_GROUP   Azure resource group (default: rg-demo-eastus2)"
+  echo "  -a STORAGE_ACCOUNT  Azure storage account (default: stdldemoeastus2)"
+  echo "  -y FILESYSTEM       Azure Data Lake filesystem (default: fsdleastus2)"
+  exit 1
+}
+
+# Parse arguments
+while getopts "n:s:g:a:y:h" opt; do
+  case $opt in
+    n) NUM_FILES="$OPTARG" ;;
+    s) FILE_SIZE="$OPTARG" ;;
+    g) RESOURCE_GROUP="$OPTARG" ;;
+    a) STORAGE_ACCOUNT="$OPTARG" ;;
+    y) FILESYSTEM="$OPTARG" ;;
+    h) usage ;;
+    *) usage ;;
+  esac
+done
 
 echo "Using RESOURCE_GROUP=$RESOURCE_GROUP"
 echo "Using STORAGE_ACCOUNT=$STORAGE_ACCOUNT"
 echo "Using FILESYSTEM=$FILESYSTEM"
 echo "Using NUM_FILES=$NUM_FILES"
+echo "Using FILE_SIZE=$FILE_SIZE"
 
 # Get storage account key
 ACCOUNT_KEY=$(az storage account keys list \
@@ -33,11 +60,12 @@ ACCOUNT_KEY=$(az storage account keys list \
   --account-name "$STORAGE_ACCOUNT" \
   --query '[0].value' -o tsv)
 
+
 # Create random files and upload
 for i in $(seq 1 $NUM_FILES); do
   RAND_SUFFIX=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 8 | head -n 1)
-  FILE="randomfile_${i}_${RAND_SUFFIX}.txt"
-  head -c 1024 </dev/urandom | base64 > "$FILE"
+  FILE="randomfile_${i}_${RAND_SUFFIX}.bin"
+  head -c "$FILE_SIZE" </dev/urandom > "$FILE"
   az storage fs file upload \
     --account-name "$STORAGE_ACCOUNT" \
     --account-key "$ACCOUNT_KEY" \
@@ -45,7 +73,7 @@ for i in $(seq 1 $NUM_FILES); do
     --path "$FILE" \
     --source "$FILE"
   rm "$FILE"
-  echo "Uploaded $FILE"
+  echo "Uploaded $FILE ($FILE_SIZE)"
 done
 
 echo "Populated $NUM_FILES random files in $FILESYSTEM on $STORAGE_ACCOUNT."

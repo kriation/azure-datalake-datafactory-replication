@@ -1,0 +1,107 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "factoryName": { "type": "string" },
+    "sourceConnectionString": { "type": "string" },
+    "destConnectionString": { "type": "string" }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.DataFactory/factories/linkedservices",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/source-fileshare')]",
+      "properties": {
+        "type": "AzureFileStorage",
+        "typeProperties": {
+          "connectionString": "[parameters('sourceConnectionString')]",
+          "fileShare": "fileshare"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/linkedservices",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/dest-fileshare')]",
+      "properties": {
+        "type": "AzureFileStorage",
+        "typeProperties": {
+          "connectionString": "[parameters('destConnectionString')]",
+          "fileShare": "fileshare"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/source-fileshare')]",
+      "properties": {
+        "linkedServiceName": { "referenceName": "source-fileshare", "type": "LinkedServiceReference" },
+        "type": "AzureFile",
+        "typeProperties": {
+          "folderPath": "/"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/dest-fileshare')]",
+      "properties": {
+        "linkedServiceName": { "referenceName": "dest-fileshare", "type": "LinkedServiceReference" },
+        "type": "AzureFile",
+        "typeProperties": {
+          "folderPath": "/"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/pipelines",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/CopyFileSharePipeline')]",
+      "properties": {
+        "activities": [
+          {
+            "name": "CopyFiles",
+            "type": "Copy",
+            "dependsOn": [],
+            "policy": {},
+            "typeProperties": {
+              "source": { "type": "FileSystemSource" },
+              "sink": { "type": "FileSystemSink" }
+            },
+            "inputs": [
+              { "referenceName": "source-fileshare", "type": "DatasetReference" }
+            ],
+            "outputs": [
+              { "referenceName": "dest-fileshare", "type": "DatasetReference" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/triggers",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/CopyFileShareTrigger')]",
+      "properties": {
+        "type": "ScheduleTrigger",
+        "typeProperties": {
+          "recurrence": {
+            "frequency": "Minute",
+            "interval": 5,
+            "startTime": "2026-03-02T12:00:00Z"
+          }
+        },
+        "pipelines": [
+          {
+            "pipelineReference": {
+              "referenceName": "CopyFileSharePipeline",
+              "type": "PipelineReference"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

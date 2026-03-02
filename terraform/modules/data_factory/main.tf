@@ -1,3 +1,14 @@
+resource "azurerm_resource_group_template_deployment" "pipeline" {
+  name                = "adf-pipeline-deployment"
+  resource_group_name = var.resource_group_name
+  deployment_mode     = "Incremental"
+  template_content    = file("${path.module}/pipeline.json")
+  parameters_content  = jsonencode({
+    factoryName = { value = azurerm_data_factory.this.name },
+    sourceConnectionString = { value = var.source_storage_connection_string },
+    destConnectionString   = { value = var.dest_storage_connection_string }
+  })
+}
 resource "azurerm_data_factory" "this" {
   name                = var.name
   location            = var.location

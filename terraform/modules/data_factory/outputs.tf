@@ -1,3 +1,3 @@
 output "name" {
-  value = azurerm_data_factory.this.name
+  value = var.data_factory_name
 }

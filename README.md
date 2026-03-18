@@ -4,7 +4,6 @@ This Terraform configuration deploys:
 - Two resource groups (East US 2 and Canada East)
 - Azure Storage Accounts with File Shares (Samba/SMB enabled) and Data Lake Gen2 in both regions
 - Azure Data Factory in Canada East to sync file shares and Data Lake Gen2 between regions
-- Data Factory Managed Virtual Network integration runtime with managed private endpoints to all source and destination storage endpoints (Azure Files + Data Lake Gen2)
 - Scheduled Data Factory pipeline triggers for continuous sync
 
 
@@ -49,7 +48,6 @@ This step ensures the Data Factory principal is created and available for role a
 
 This will:
   - Assign the required roles to the Data Factory managed identity
-  - Create Data Factory managed private endpoints for source/destination Azure Files and Data Lake Gen2 endpoints
   - Deploy Data Factory pipelines, triggers, and linked services (including Data Lake Gen2)
   - Deploy all storage and supporting resources
 
@@ -67,8 +65,6 @@ This will:
 - Always run Step 4 first after a fresh deployment or destroy, so the principal_id is available for role assignments.
 - If you change the Data Factory identity, repeat Step 4 and then Step 5.
 - If you encounter ARM template errors, check for case-sensitive name mismatches and resource ordering in pipeline.json.
-- Storage accounts and Data Factory have public network access disabled; Data Factory copy traffic is expected to flow through managed private endpoints in ADF managed VNet.
-- Managed private endpoint connections can appear as pending in some subscriptions/tenants and may require approval on the target storage accounts.
 
 
 ## Automation & Patterns

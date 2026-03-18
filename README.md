@@ -1,11 +1,4 @@
-# Azure Demo Environment with Terraform
-
-
-# Azure Multi-Region File Sync Demo (Terraform)
-
-
-# Azure Multi-Region File Sync Demo (Terraform)
-
+# Azure Datalake Object Replication with Azure Data Factory
 
 This Terraform configuration deploys:
 - Two resource groups (East US 2 and Canada East)

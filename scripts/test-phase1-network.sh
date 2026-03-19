@@ -9,10 +9,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TF_DIR="$REPO_ROOT/terraform"
 TFVARS_FILE="demo.tfvars"
 KEEP_RESOURCES=false
-DESTROY_RGS=false
+CLEANUP_ALL=false
 AUTO_APPROVE=true
 DEPLOYED=false
-DESTROY_ONLY=false
+CLEANUP_PHASE=false
 
 usage() {
   cat <<EOF
@@ -21,16 +21,16 @@ Usage: $(basename "$0") [options]
 Options:
   -f, --tfvars FILE      Terraform var-file name under terraform/ (default: demo.tfvars)
   -k, --keep             Keep deployed resources (skip destroy)
-  --destroy-only         Destroy Phase 1 resources without deploying/validating
-  --destroy-rgs          Also destroy resource groups (off by default)
+  --cleanup-phase        Destroy Phase 1 networks only (skip deploy/validate)
+  --cleanup-all          Destroy Phase 1 networks and resource groups (implies --cleanup-phase)
   --no-auto-approve      Disable -auto-approve in terraform apply/destroy
   -h, --help             Show this help
 
 Examples:
   ./scripts/test-phase1-network.sh
   ./scripts/test-phase1-network.sh --tfvars demo.tfvars --keep
-  ./scripts/test-phase1-network.sh --destroy-only
-  ./scripts/test-phase1-network.sh --destroy-rgs
+  ./scripts/test-phase1-network.sh --cleanup-phase
+  ./scripts/test-phase1-network.sh --cleanup-all
 EOF
 }
 
@@ -44,12 +44,12 @@ while [[ $# -gt 0 ]]; do
       KEEP_RESOURCES=true
       shift
       ;;
-    --destroy-only)
-      DESTROY_ONLY=true
+    --cleanup-phase)
+      CLEANUP_PHASE=true
       shift
       ;;
-    --destroy-rgs)
-      DESTROY_RGS=true
+    --cleanup-all)
+      CLEANUP_ALL=true
       shift
       ;;
     --no-auto-approve)
@@ -99,7 +99,7 @@ destroy_phase1() {
   echo "[INFO] Destroying Phase 1 network modules..."
   tf destroy -target=module.eastus2_network -target=module.canadaeast_network -var-file="$TFVARS_FILE" "${TF_APPROVE_ARGS[@]}" || true
 
-  if [[ "$DESTROY_RGS" == true ]]; then
+  if [[ "$CLEANUP_ALL" == true ]]; then
     echo "[INFO] Destroying Phase 1 resource groups..."
     tf destroy -target=module.eastus2_rg -target=module.canadaeast_rg -var-file="$TFVARS_FILE" "${TF_APPROVE_ARGS[@]}" || true
   fi
@@ -131,9 +131,14 @@ trap 'cleanup $?' EXIT
 echo "[INFO] Initializing Terraform..."
 tf init -upgrade=false >/dev/null
 
-if [[ "$DESTROY_ONLY" == true ]]; then
+# --cleanup-all implies --cleanup-phase
+if [[ "$CLEANUP_ALL" == true ]]; then
+  CLEANUP_PHASE=true
+fi
+
+if [[ "$CLEANUP_PHASE" == true ]]; then
   destroy_phase1
-  echo "[PASS] Destroy-only operation completed."
+  echo "[PASS] Cleanup operation completed."
   exit 0
 fi
 

@@ -48,6 +48,7 @@ module "eastus2_rg" {
   source   = "./modules/resource_group"
   name     = var.eastus2_rg_name
   location = "eastus2"
+  tags     = var.resource_group_tags
   providers = {
     azurerm = azurerm.eastus2
   }
@@ -57,6 +58,7 @@ module "canadaeast_rg" {
   source   = "./modules/resource_group"
   name     = var.canadaeast_rg_name
   location = "canadaeast"
+  tags     = var.resource_group_tags
   providers = {
     azurerm = azurerm.canadaeast
   }

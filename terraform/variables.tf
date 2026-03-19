@@ -18,6 +18,12 @@ variable "canadaeast_rg_name" {
   description = "Resource Group name for Canada East"
 }
 
+variable "resource_group_tags" {
+  description = "Optional tags applied to regional resource groups. Keep sensitive or internal-only values in untracked local tfvars files."
+  type        = map(string)
+  default     = {}
+}
+
 variable "eastus2_storage_name" {
   default     = "demoeastus2storage"
   description = "Storage Account name for East US 2"

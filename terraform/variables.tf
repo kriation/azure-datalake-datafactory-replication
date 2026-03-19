@@ -149,3 +149,63 @@ variable "key_vault_ip_rules" {
   type        = list(string)
   default     = []
 }
+
+variable "eastus2_storage_cmk_name" {
+  description = "CMK name for the East US 2 file share storage account."
+  type        = string
+  default     = "cmk-st-eastus2"
+}
+
+variable "eastus2_datalake_cmk_name" {
+  description = "CMK name for the East US 2 Data Lake storage account."
+  type        = string
+  default     = "cmk-dl-eastus2"
+}
+
+variable "canadaeast_storage_cmk_name" {
+  description = "CMK name for the Canada East file share storage account."
+  type        = string
+  default     = "cmk-st-canadaeast"
+}
+
+variable "canadaeast_datalake_cmk_name" {
+  description = "CMK name for the Canada East Data Lake storage account."
+  type        = string
+  default     = "cmk-dl-canadaeast"
+}
+
+variable "canadaeast_data_factory_cmk_name" {
+  description = "CMK name for the Canada East Data Factory instance."
+  type        = string
+  default     = "cmk-adf-canadaeast"
+}
+
+variable "key_vault_cmk_key_type" {
+  description = "Key Vault key type used for CMKs."
+  type        = string
+  default     = "RSA-HSM"
+}
+
+variable "key_vault_cmk_key_size" {
+  description = "Key size used for CMKs."
+  type        = number
+  default     = 2048
+}
+
+variable "key_vault_admin_role_definition_name" {
+  description = "Role granted to the deploying principal so Terraform can manage keys in RBAC-enabled vaults."
+  type        = string
+  default     = "Key Vault Administrator"
+}
+
+variable "key_vault_crypto_user_role_definition_name" {
+  description = "Role granted to service identities that need CMK crypto operations."
+  type        = string
+  default     = "Key Vault Crypto Service Encryption User"
+}
+
+variable "key_vault_role_assignment_propagation_wait" {
+  description = "Wait duration after Key Vault RBAC assignments before creating data-plane CMKs."
+  type        = string
+  default     = "30s"
+}

@@ -65,6 +65,16 @@ Validate Phase 2 before continuing:
     - Key Vault private endpoints are provisioned and approved
     - Key Vault private DNS zone group binding is present
 
+Before continuing with storage CMK work, run the Phase 3 gate:
+
+    terraform apply -target=module.data_factory_identity -target=module.eastus2_encryption_keys -target=module.canadaeast_encryption_keys -var-file=demo.tfvars
+
+Validate Phase 3 before continuing:
+    - CMK keys exist in both regional Key Vaults
+    - The deploying principal has Key Vault Administrator RBAC on both vaults
+    - The Canada East Data Factory identity has Key Vault Crypto Service Encryption User RBAC
+    - Key Vaults are restored to `publicNetworkAccess = Disabled` after the local CMK bootstrap completes
+
 **Step 6: (Optional) Populate Demo Data**
 
     ../scripts/populate-source-fileshare.sh
@@ -101,12 +111,26 @@ Useful options:
     ../scripts/test-phase2-keyvault.sh --cleanup-all
     ../scripts/test-phase2-keyvault.sh --tfvars demo.tfvars
 
+**Step 10: (Optional) Automated Phase 3 Gate Test**
+
+Run a single command that performs deploy, validation, and destroy for the
+Phase 3 CMK and Key Vault RBAC foundation:
+
+    ../scripts/test-phase3-cmk.sh
+
+Useful options:
+    ../scripts/test-phase3-cmk.sh --keep
+    ../scripts/test-phase3-cmk.sh --cleanup-phase
+    ../scripts/test-phase3-cmk.sh --cleanup-all
+    ../scripts/test-phase3-cmk.sh --tfvars demo.tfvars
+
 **Phase Test Script Dependency Model**
 
 Each phase test script is **self-contained and can run independently**:
 
 - `test-phase1-network.sh`: Deploys Phase 1 (RGs + network), validates, and destroys
 - `test-phase2-keyvault.sh`: Internally deploys Phase 1 prerequisites (RGs + network), then deploys Phase 2 (Key Vault), validates both, and destroys Phase 2 (optionally Phase 1 with `--cleanup-all`)
+- `test-phase3-cmk.sh`: Internally deploys Phases 1-2 plus Data Factory identity, then deploys Phase 3 CMKs and RBAC, validates, and destroys Phase 3 (optionally all earlier phases with `--cleanup-all`)
 - **Phase 3+ scripts will follow the same pattern**: Each phase test script will internally bootstrap all prior-phase prerequisites
 
 This design enables:
@@ -130,6 +154,8 @@ The phased Terraform apply sequence (Steps 4-5) follows the same dependency mode
 - Use `--cleanup-phase` to destroy only phase-specific resources from a prior run that used `--keep`.
 - Use `--cleanup-all` on Phase 1 only in disposable environments (removes RGs).
 - The Phase 2 gate script (`test-phase2-keyvault.sh`) destroys only Key Vault resources by default; use `--cleanup-all` to also remove Phase 1 prerequisites (network + RGs).
+- The Phase 3 gate script (`test-phase3-cmk.sh`) destroys CMKs, their Key Vault RBAC assignments, and the Data Factory identity by default; use `--cleanup-all` to also remove Phases 1-2 prerequisites.
+- The Phase 3 gate script (`test-phase3-cmk.sh`) temporarily allows the caller's current public IP to reach the Key Vault data plane so local Terraform can create CMKs, then restores both vaults to `publicNetworkAccess = Disabled` before completion.
 - Key Vault delete is asynchronous in Azure; the script will emit a clear status message if Terraform times out and the vault is already removed from active resources.
 - If re-deploying fails due to a soft-deleted vault holding the name, the script will print an exact remediation command to purge it manually.
 - For demonstration speed, purge protection is disabled and Key Vault soft-delete retention is set to 7 days.

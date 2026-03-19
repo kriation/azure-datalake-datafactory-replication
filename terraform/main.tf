@@ -16,6 +16,10 @@ terraform {
       source  = "hashicorp/azurerm"
       version = ">= 3.0"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = ">= 0.9"
+    }
   }
   required_version = ">= 1.0"
 }
@@ -37,6 +41,8 @@ provider "azurerm" {
   subscription_id = var.subscription_id
   tenant_id       = var.tenant_id
 }
+
+data "azurerm_client_config" "current" {}
 
 module "eastus2_rg" {
   source   = "./modules/resource_group"
@@ -150,6 +156,76 @@ module "data_factory_identity" {
   providers = {
     azurerm = azurerm.canadaeast
   }
+}
+
+resource "azurerm_role_assignment" "eastus2_key_vault_admin_current" {
+  scope                = module.eastus2_key_vault.id
+  role_definition_name = var.key_vault_admin_role_definition_name
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+resource "azurerm_role_assignment" "canadaeast_key_vault_admin_current" {
+  scope                = module.canadaeast_key_vault.id
+  role_definition_name = var.key_vault_admin_role_definition_name
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+resource "azurerm_role_assignment" "canadaeast_data_factory_key_vault_crypto_user" {
+  scope                = module.canadaeast_key_vault.id
+  role_definition_name = var.key_vault_crypto_user_role_definition_name
+  principal_id         = module.data_factory_identity.principal_id
+}
+
+resource "time_sleep" "eastus2_key_vault_rbac_propagation" {
+  create_duration = var.key_vault_role_assignment_propagation_wait
+
+  depends_on = [
+    azurerm_role_assignment.eastus2_key_vault_admin_current,
+  ]
+}
+
+resource "time_sleep" "canadaeast_key_vault_rbac_propagation" {
+  create_duration = var.key_vault_role_assignment_propagation_wait
+
+  depends_on = [
+    azurerm_role_assignment.canadaeast_key_vault_admin_current,
+    azurerm_role_assignment.canadaeast_data_factory_key_vault_crypto_user,
+  ]
+}
+
+module "eastus2_encryption_keys" {
+  source       = "./modules/encryption_keys"
+  key_vault_id = module.eastus2_key_vault.id
+  key_names = [
+    var.eastus2_storage_cmk_name,
+    var.eastus2_datalake_cmk_name,
+  ]
+  key_type = var.key_vault_cmk_key_type
+  key_size = var.key_vault_cmk_key_size
+  providers = {
+    azurerm = azurerm.eastus2
+  }
+  depends_on = [
+    time_sleep.eastus2_key_vault_rbac_propagation,
+  ]
+}
+
+module "canadaeast_encryption_keys" {
+  source       = "./modules/encryption_keys"
+  key_vault_id = module.canadaeast_key_vault.id
+  key_names = [
+    var.canadaeast_storage_cmk_name,
+    var.canadaeast_datalake_cmk_name,
+    var.canadaeast_data_factory_cmk_name,
+  ]
+  key_type = var.key_vault_cmk_key_type
+  key_size = var.key_vault_cmk_key_size
+  providers = {
+    azurerm = azurerm.canadaeast
+  }
+  depends_on = [
+    time_sleep.canadaeast_key_vault_rbac_propagation,
+  ]
 }
 
 # Data Factory (pipelines, ARM, role assignments)

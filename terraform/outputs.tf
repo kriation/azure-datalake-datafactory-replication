@@ -54,6 +54,42 @@ output "canadaeast_key_vault_private_endpoint_id" {
   value = module.canadaeast_key_vault.private_endpoint_id
 }
 
+output "current_operator_object_id" {
+  value = data.azurerm_client_config.current.object_id
+}
+
+output "data_factory_principal_id" {
+  value = module.data_factory_identity.principal_id
+}
+
+output "key_vault_admin_role_definition_name" {
+  value = var.key_vault_admin_role_definition_name
+}
+
+output "key_vault_crypto_user_role_definition_name" {
+  value = var.key_vault_crypto_user_role_definition_name
+}
+
+output "eastus2_storage_cmk_key_id" {
+  value = module.eastus2_encryption_keys.versionless_key_ids[var.eastus2_storage_cmk_name]
+}
+
+output "eastus2_datalake_cmk_key_id" {
+  value = module.eastus2_encryption_keys.versionless_key_ids[var.eastus2_datalake_cmk_name]
+}
+
+output "canadaeast_storage_cmk_key_id" {
+  value = module.canadaeast_encryption_keys.versionless_key_ids[var.canadaeast_storage_cmk_name]
+}
+
+output "canadaeast_datalake_cmk_key_id" {
+  value = module.canadaeast_encryption_keys.versionless_key_ids[var.canadaeast_datalake_cmk_name]
+}
+
+output "canadaeast_data_factory_cmk_key_id" {
+  value = module.canadaeast_encryption_keys.versionless_key_ids[var.canadaeast_data_factory_cmk_name]
+}
+
 output "eastus2_storage_name" {
   value = module.eastus2_storage.name
 }

@@ -56,6 +56,34 @@ module "canadaeast_rg" {
   }
 }
 
+module "eastus2_network" {
+  source                           = "./modules/network"
+  name                             = var.eastus2_vnet_name
+  resource_group_name              = module.eastus2_rg.name
+  location                         = module.eastus2_rg.location
+  address_space                    = var.eastus2_vnet_address_space
+  private_endpoint_subnet_name     = var.eastus2_private_endpoint_subnet_name
+  private_endpoint_subnet_prefixes = var.eastus2_private_endpoint_subnet_prefixes
+  private_dns_zone_names           = var.private_dns_zone_names
+  providers = {
+    azurerm = azurerm.eastus2
+  }
+}
+
+module "canadaeast_network" {
+  source                           = "./modules/network"
+  name                             = var.canadaeast_vnet_name
+  resource_group_name              = module.canadaeast_rg.name
+  location                         = module.canadaeast_rg.location
+  address_space                    = var.canadaeast_vnet_address_space
+  private_endpoint_subnet_name     = var.canadaeast_private_endpoint_subnet_name
+  private_endpoint_subnet_prefixes = var.canadaeast_private_endpoint_subnet_prefixes
+  private_dns_zone_names           = var.private_dns_zone_names
+  providers = {
+    azurerm = azurerm.canadaeast
+  }
+}
+
 module "eastus2_storage" {
   source              = "./modules/storage_account"
   name                = var.eastus2_storage_name

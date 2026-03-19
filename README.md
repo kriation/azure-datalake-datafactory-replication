@@ -22,7 +22,7 @@ This Terraform configuration deploys:
 
 
 
-## Usage (Staged Apply for Data Factory Managed Identity)
+## Usage (Phased Deployment)
 
 **Step 1: Authenticate**
 
@@ -36,20 +36,25 @@ Edit only `demo.tfvars` to supply your Azure subscription, tenant, and resource 
 
     terraform init
 
-**Step 4: Create Data Factory and Managed Identity**
+**Step 4: Phase 1 Gate - Resource Groups and Network Foundation**
 
-This step ensures the Data Factory principal is created and available for role assignments.
+Run this sequence to deploy the Phase 1 baseline in dependency order:
 
-    terraform apply -target=module.data_factory_identity -var-file=demo.tfvars
+        terraform apply -target=module.eastus2_rg -target=module.canadaeast_rg -var-file=demo.tfvars
+        terraform apply -target=module.eastus2_network -target=module.canadaeast_network -var-file=demo.tfvars
 
-**Step 5: Apply the Rest of the Infrastructure**
+Validate Phase 1 before continuing:
+    - Both VNets exist (East US 2 and Canada East)
+    - Private endpoint subnet exists in each region
+    - Private DNS zones are created and linked to each VNet
+    - CIDR ranges do not overlap with your corporate networking
 
-    terraform apply -var-file=demo.tfvars
+**Step 5: Continue with Existing Stack Deployment**
 
-This will:
-  - Assign the required roles to the Data Factory managed identity
-  - Deploy Data Factory pipelines, triggers, and linked services (including Data Lake Gen2)
-  - Deploy all storage and supporting resources
+Continue with staged apply for Data Factory identity and full deployment:
+
+        terraform apply -target=module.data_factory_identity -var-file=demo.tfvars
+        terraform apply -var-file=demo.tfvars
 
 **Step 6: (Optional) Populate Demo Data**
 
@@ -61,9 +66,26 @@ This will:
     ../scripts/toggle-trigger.sh start|stop
     ../scripts/toggle-datalake-trigger.sh start|stop
 
+**Step 8: (Optional) Automated Phase 1 Gate Test**
+
+Run a single command that performs deploy, validation, and destroy for the
+Phase 1 network foundation:
+
+    ../scripts/test-phase1-network.sh
+
+Useful options:
+    ../scripts/test-phase1-network.sh --keep
+    ../scripts/test-phase1-network.sh --destroy-only
+    ../scripts/test-phase1-network.sh --destroy-rgs
+    ../scripts/test-phase1-network.sh --tfvars demo.tfvars
+
 **Notes:**
-- Always run Step 4 first after a fresh deployment or destroy, so the principal_id is available for role assignments.
-- If you change the Data Factory identity, repeat Step 4 and then Step 5.
+- Always run the Phase 1 gate before deploying private endpoint dependent services.
+- Always run the Data Factory identity apply before full apply after a fresh deployment or destroy.
+- If you change the Data Factory identity, repeat Step 5.
+- The Phase 1 gate script destroys network resources by default; use `--keep` to preserve them for manual inspection.
+- Use `--destroy-only` to tear down resources from a prior run that used `--keep`.
+- Use `--destroy-rgs` only in disposable environments.
 - If you encounter ARM template errors, check for case-sensitive name mismatches and resource ordering in pipeline.json.
 
 

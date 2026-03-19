@@ -107,3 +107,45 @@ variable "private_dns_zone_names" {
     "privatelink.vaultcore.azure.net"
   ]
 }
+
+variable "eastus2_key_vault_name" {
+  description = "Key Vault name for East US 2"
+  type        = string
+  default     = "kvdemoeastus2"
+}
+
+variable "canadaeast_key_vault_name" {
+  description = "Key Vault name for Canada East"
+  type        = string
+  default     = "kvdemocanadaeast"
+}
+
+variable "key_vault_sku_name" {
+  description = "SKU tier for regional Key Vaults"
+  type        = string
+  default     = "premium"
+}
+
+variable "key_vault_soft_delete_retention_days" {
+  description = "Soft delete retention in days for regional Key Vaults (minimum 7 in Azure)"
+  type        = number
+  default     = 7
+}
+
+variable "key_vault_purge_protection_enabled" {
+  description = "Enable purge protection for regional Key Vaults"
+  type        = bool
+  default     = false
+}
+
+variable "key_vault_public_network_access_enabled" {
+  description = "Enable public network access for regional Key Vaults"
+  type        = bool
+  default     = false
+}
+
+variable "key_vault_ip_rules" {
+  description = "Optional CIDRs allowed to access regional Key Vault public endpoint"
+  type        = list(string)
+  default     = []
+}

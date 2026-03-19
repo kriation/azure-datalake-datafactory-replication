@@ -30,6 +30,30 @@ output "canadaeast_private_dns_zone_names" {
   value = module.canadaeast_network.private_dns_zone_names
 }
 
+output "eastus2_key_vault_name" {
+  value = module.eastus2_key_vault.name
+}
+
+output "canadaeast_key_vault_name" {
+  value = module.canadaeast_key_vault.name
+}
+
+output "eastus2_key_vault_uri" {
+  value = module.eastus2_key_vault.vault_uri
+}
+
+output "canadaeast_key_vault_uri" {
+  value = module.canadaeast_key_vault.vault_uri
+}
+
+output "eastus2_key_vault_private_endpoint_id" {
+  value = module.eastus2_key_vault.private_endpoint_id
+}
+
+output "canadaeast_key_vault_private_endpoint_id" {
+  value = module.canadaeast_key_vault.private_endpoint_id
+}
+
 output "eastus2_storage_name" {
   value = module.eastus2_storage.name
 }

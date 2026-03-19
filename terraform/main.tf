@@ -84,6 +84,42 @@ module "canadaeast_network" {
   }
 }
 
+module "eastus2_key_vault" {
+  source                         = "./modules/key_vault"
+  name                           = var.eastus2_key_vault_name
+  location                       = module.eastus2_rg.location
+  resource_group_name            = module.eastus2_rg.name
+  tenant_id                      = var.tenant_id
+  private_endpoint_subnet_id     = module.eastus2_network.private_endpoint_subnet_id
+  private_dns_zone_id            = module.eastus2_network.private_dns_zone_ids["privatelink.vaultcore.azure.net"]
+  sku_name                       = var.key_vault_sku_name
+  soft_delete_retention_days     = var.key_vault_soft_delete_retention_days
+  purge_protection_enabled       = var.key_vault_purge_protection_enabled
+  public_network_access_enabled  = var.key_vault_public_network_access_enabled
+  ip_rules                       = var.key_vault_ip_rules
+  providers = {
+    azurerm = azurerm.eastus2
+  }
+}
+
+module "canadaeast_key_vault" {
+  source                         = "./modules/key_vault"
+  name                           = var.canadaeast_key_vault_name
+  location                       = module.canadaeast_rg.location
+  resource_group_name            = module.canadaeast_rg.name
+  tenant_id                      = var.tenant_id
+  private_endpoint_subnet_id     = module.canadaeast_network.private_endpoint_subnet_id
+  private_dns_zone_id            = module.canadaeast_network.private_dns_zone_ids["privatelink.vaultcore.azure.net"]
+  sku_name                       = var.key_vault_sku_name
+  soft_delete_retention_days     = var.key_vault_soft_delete_retention_days
+  purge_protection_enabled       = var.key_vault_purge_protection_enabled
+  public_network_access_enabled  = var.key_vault_public_network_access_enabled
+  ip_rules                       = var.key_vault_ip_rules
+  providers = {
+    azurerm = azurerm.canadaeast
+  }
+}
+
 module "eastus2_storage" {
   source              = "./modules/storage_account"
   name                = var.eastus2_storage_name

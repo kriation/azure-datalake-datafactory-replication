@@ -71,7 +71,7 @@ variable "ip_rules" {
 }
 
 variable "delete_timeout" {
-  description = "Timeout for Key Vault delete operations. Short values speed up demo teardown when Azure ARM finalization lags."
+  description = "Timeout for Key Vault delete operations. Short values speed up demo teardown when Azure ARM finalization lags; demo default is 5 minutes."
   type        = string
-  default     = "10m"
+  default     = "5m"
 }

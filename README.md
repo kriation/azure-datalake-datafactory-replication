@@ -111,6 +111,11 @@ Validate Phase 6 before continuing:
     ../scripts/populate-source-fileshare.sh
     ../scripts/populate-source-datalake.sh
 
+The file-share populate script now reads its connection string from the
+Canada East Key Vault secret (`adf-source-fileshare-connection-string`) and
+temporarily opens both Key Vault and source storage network access from the
+current operator IP before restoring lockdown.
+
 **Step 7: (Optional) Control Data Factory Triggers**
 
     ../scripts/toggle-trigger.sh start|stop
@@ -127,6 +132,13 @@ Useful options:
     ../scripts/validate-adf-health.sh --hours 12
     ../scripts/validate-adf-health.sh --pipelines copydatalakegen2pipeline
     ../scripts/validate-adf-health.sh --skip-trigger-check
+
+**Step 7c: Phase 7 Gate - Operational Script Secret Consumption**
+
+Validate Phase 7 before continuing:
+    - `../scripts/populate-source-fileshare.sh` reads source connection string from Key Vault (not storage key list)
+    - The script restores Key Vault and storage public network access to `Disabled` at exit
+    - Script arguments support overriding the Key Vault name and secret name for environment portability
 
 **Step 8: (Optional) Automated Phase 1 Gate Test**
 

@@ -24,6 +24,7 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 	- Phase 4: Storage accounts with CMK binding, TLS1_2 policy validation, and disabled public network access
 	- Phase 5: Data Factory CMK enablement
 	- Phase 6: Key Vault-backed linked service secret references
+	- Phase 7: Operational script updates to use Key Vault-hosted secrets
 - All Data Factory objects (linked services, datasets, pipelines, triggers) are managed via a parameterized ARM template for full repeatability and UI compatibility. **Resource ordering and case-sensitive naming are critical for successful deployment.**
 - Scripts in the `scripts/` directory support demo data population and trigger management.
 - Terraform uses a single local state, but build-time validation uses staged `-target` applies in dependency order. Steady-state usage remains full `terraform plan` and `terraform apply`.
@@ -85,6 +86,7 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 - Phase 4 relies on Key Vault trusted service bypass (`AzureServices`) so storage accounts can perform CMK operations while Key Vault public network access remains disabled.
 - Because Phase 4 requires purge-protected Key Vaults for storage CMK binding, phase test scripts no longer attempt to destroy Key Vaults once Phase 2 has been applied.
 - Scripts are provided for demo data, trigger management, and per-phase validation
+- File-share operational scripts now resolve connection strings from Key Vault-hosted secrets and restore network lockdown automatically after temporary bootstrap access.
 - Data Factory CMK enablement is modeled with `azurerm_data_factory_customer_managed_key`; once applied, Azure requires Data Factory recreation to remove the CMK binding.
 - Azure also rejects adding a CMK to an existing Data Factory that already has entities deployed, so existing environments require a one-time Data Factory recreation; the Terraform graph should bind the CMK before the ARM template deploys ADF entities in fresh environments.
 
@@ -98,8 +100,7 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 - Update this file if you add new modules, workflows, or architectural changes
 
 
-- Planned remaining phases after Phase 6:
-	- Phase 7: Operational script updates to use Key Vault-hosted secrets
+- Planned remaining phases after Phase 7:
 	- Phase 8: Full-stack convergence and replication smoke tests
 - If you encounter ARM template errors, check for case-sensitive name mismatches and resource ordering in pipeline.json.
 - See `README.md` for phased deployment and validation details

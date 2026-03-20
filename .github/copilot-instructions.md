@@ -46,6 +46,7 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 - `scripts/test-phase3-cmk.sh`: Self-contained Phase 3 integration test for CMK creation and RBAC validation
 - `scripts/test-phase4-storage-cmk-tls.sh`: Self-contained Phase 4 integration test for storage CMK bindings and TLS/public-access validation
 - `scripts/populate-source-fileshare.sh`: Populates the source file share with random files for demo/testing
+- `scripts/validate-adf-health.sh`: Minimal ADF replication health gate for trigger state and recent pipeline outcomes
 - `scripts/toggle-trigger.sh`: CLI tool to start/stop the Data Factory pipeline trigger
 
 ## Developer Workflow
@@ -64,6 +65,7 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 5. After phased validation, use full `terraform plan -var-file=demo.tfvars` and `terraform apply -var-file=demo.tfvars` only from an environment that can reach the private data plane. From a public workstation after Phase 4 lockdown, use `terraform plan -refresh=false -var-file=demo.tfvars` for convergence checks and the phase gate scripts for refreshed validation.
 6. (Optional) Run `scripts/populate-source-fileshare.sh` or `scripts/populate-source-datalake.sh` to add demo data
 7. (Optional) Use `scripts/toggle-trigger.sh start|stop` or `scripts/toggle-datalake-trigger.sh start|stop` to control the scheduled pipelines
+8. (Recommended) Validate replication health with `scripts/validate-adf-health.sh` (or scope with `--pipelines copydatalakegen2pipeline` while fileshare private connectivity hardening is in progress)
 
 ## Conventions & Patterns
 - All cross-module secrets (storage connection strings) are passed via module outputs and variables—no manual secret editing required

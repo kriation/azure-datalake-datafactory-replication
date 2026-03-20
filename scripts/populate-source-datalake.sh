@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Prerequisites:
 # 1. Azure CLI installed and authenticated (az login)
@@ -7,6 +7,10 @@
 # 4. Bash shell and coreutils (head, base64, rm) available
 # 5. Script is executable: chmod +x scripts/populate-source-datalake.sh
 #
+# Note: If the storage account has public network access disabled (Phase 4 lockdown),
+# this script temporarily enables access from the current operator IP and restores
+# lockdown on exit.
+#
 # Optional:
 # - Edit RESOURCE_GROUP, STORAGE_ACCOUNT, FILESYSTEM, or NUM_FILES in the script to match your environment
 #
@@ -14,6 +18,10 @@
 #   ./populate-source-datalake.sh
 
 set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/storage-network-access.sh
+source "$SCRIPT_DIR/lib/storage-network-access.sh"
 
 
 
@@ -54,12 +62,20 @@ echo "Using FILESYSTEM=$FILESYSTEM"
 echo "Using NUM_FILES=$NUM_FILES"
 echo "Using FILE_SIZE=$FILE_SIZE"
 
+# Temporarily open storage network access from the current operator IP.
+detect_bootstrap_cidr
+open_storage_account_access "$STORAGE_ACCOUNT" "$RESOURCE_GROUP"
+trap 'close_all_storage_access' EXIT
+
 # Get storage account key
 ACCOUNT_KEY=$(az storage account keys list \
   --resource-group "$RESOURCE_GROUP" \
   --account-name "$STORAGE_ACCOUNT" \
   --query '[0].value' -o tsv)
 
+
+# Verify the DFS data plane is accepting requests before uploading.
+wait_for_storage_account_data_plane "dfs" "$STORAGE_ACCOUNT" "$ACCOUNT_KEY"
 
 # Create random files and upload
 for i in $(seq 1 $NUM_FILES); do

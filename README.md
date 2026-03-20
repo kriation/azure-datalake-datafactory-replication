@@ -19,6 +19,7 @@ This Terraform configuration deploys:
   - `data_factory/`: Data Factory, pipeline, and trigger automation (via ARM template)
 - `../scripts/populate-source-fileshare.sh`: Populates the source file share with random files for demo/testing
 - `../scripts/toggle-trigger.sh`: CLI tool to start/stop the Data Factory pipeline trigger
+- `../scripts/validate-adf-health.sh`: Minimal replication health gate based on trigger state and recent pipeline run outcomes
 
 
 
@@ -93,6 +94,18 @@ Validate Phase 4 before continuing:
 
     ../scripts/toggle-trigger.sh start|stop
     ../scripts/toggle-datalake-trigger.sh start|stop
+
+**Step 7b: Recommended Replication Health Validation**
+
+Use a minimal health gate that validates trigger runtime state and the latest
+pipeline run outcomes in a recent lookback window:
+
+    ../scripts/validate-adf-health.sh
+
+Useful options:
+    ../scripts/validate-adf-health.sh --hours 12
+    ../scripts/validate-adf-health.sh --pipelines copydatalakegen2pipeline
+    ../scripts/validate-adf-health.sh --skip-trigger-check
 
 **Step 8: (Optional) Automated Phase 1 Gate Test**
 
@@ -193,6 +206,7 @@ The phased Terraform apply sequence (Steps 4-5) follows the same dependency mode
 - Only `demo.tfvars` should be changed for new environments or redeployments
 - All Data Factory objects (linked services, datasets, pipelines, triggers) are managed via ARM template for full automation and UI compatibility. **Resource ordering and case-sensitive naming are required for successful deployment.**
 - Scripts are provided for demo data and trigger management
+- Replication validation is standardized on `scripts/validate-adf-health.sh` for post-Phase-4 locked-down environments.
 
 
 ## Requirements

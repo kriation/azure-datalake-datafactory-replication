@@ -141,7 +141,7 @@ variable "key_vault_soft_delete_retention_days" {
 variable "key_vault_purge_protection_enabled" {
   description = "Enable purge protection for regional Key Vaults"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "key_vault_public_network_access_enabled" {
@@ -154,6 +154,12 @@ variable "key_vault_ip_rules" {
   description = "Optional CIDRs allowed to access regional Key Vault public endpoint"
   type        = list(string)
   default     = []
+}
+
+variable "key_vault_bypass" {
+  description = "Network ACL bypass mode for regional Key Vaults."
+  type        = string
+  default     = "None"
 }
 
 variable "eastus2_storage_cmk_name" {
@@ -214,4 +220,22 @@ variable "key_vault_role_assignment_propagation_wait" {
   description = "Wait duration after Key Vault RBAC assignments before creating data-plane CMKs."
   type        = string
   default     = "30s"
+}
+
+variable "storage_min_tls_version" {
+  description = "Minimum TLS version for all storage accounts."
+  type        = string
+  default     = "TLS1_2"
+}
+
+variable "storage_public_network_access_enabled" {
+  description = "Enable public network access for storage accounts."
+  type        = bool
+  default     = false
+}
+
+variable "create_datalake_filesystems" {
+  description = "Whether Data Lake filesystem resources should be created."
+  type        = bool
+  default     = true
 }

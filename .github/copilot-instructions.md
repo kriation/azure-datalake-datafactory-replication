@@ -21,6 +21,7 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 	- Phase 1: Resource groups, VNets, private-endpoint subnets, private DNS zones
 	- Phase 2: Regional Key Vaults with private endpoints and deny-by-default network ACLs
 	- Phase 3: Regional CMK creation and Key Vault RBAC for the deploying principal and Data Factory identity
+	- Phase 4: Storage accounts with CMK binding, TLS1_2 policy validation, and disabled public network access
 - All Data Factory objects (linked services, datasets, pipelines, triggers) are managed via a parameterized ARM template for full repeatability and UI compatibility. **Resource ordering and case-sensitive naming are critical for successful deployment.**
 - Scripts in the `scripts/` directory support demo data population and trigger management.
 - Terraform uses a single local state, but build-time validation uses staged `-target` applies in dependency order. Steady-state usage remains full `terraform plan` and `terraform apply`.
@@ -43,6 +44,7 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 - `scripts/test-phase1-network.sh`: Self-contained Phase 1 integration test (deploy, validate, cleanup)
 - `scripts/test-phase2-keyvault.sh`: Self-contained Phase 2 integration test with clearer timeout signaling for Key Vault destroy
 - `scripts/test-phase3-cmk.sh`: Self-contained Phase 3 integration test for CMK creation and RBAC validation
+- `scripts/test-phase4-storage-cmk-tls.sh`: Self-contained Phase 4 integration test for storage CMK bindings and TLS/public-access validation
 - `scripts/populate-source-fileshare.sh`: Populates the source file share with random files for demo/testing
 - `scripts/toggle-trigger.sh`: CLI tool to start/stop the Data Factory pipeline trigger
 
@@ -53,11 +55,13 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 	 - Phase 1: `terraform apply -target=module.eastus2_rg -target=module.canadaeast_rg -var-file=demo.tfvars`, then `terraform apply -target=module.eastus2_network -target=module.canadaeast_network -var-file=demo.tfvars`
 	 - Phase 2: `terraform apply -target=module.eastus2_key_vault -target=module.canadaeast_key_vault -var-file=demo.tfvars`
 	 - Phase 3: `terraform apply -target=module.data_factory_identity -target=module.eastus2_encryption_keys -target=module.canadaeast_encryption_keys -var-file=demo.tfvars`
+	 - Phase 4: `terraform apply -target=module.eastus2_storage -target=module.canadaeast_storage -target=module.eastus2_datalake -target=module.canadaeast_datalake -target=azurerm_storage_account_customer_managed_key.eastus2_storage_cmk_binding -target=azurerm_storage_account_customer_managed_key.eastus2_datalake_cmk_binding -target=azurerm_storage_account_customer_managed_key.canadaeast_storage_cmk_binding -target=azurerm_storage_account_customer_managed_key.canadaeast_datalake_cmk_binding -var-file=demo.tfvars`
 4. Prefer the self-contained phase gate scripts for validation:
 	 - `scripts/test-phase1-network.sh`
 	 - `scripts/test-phase2-keyvault.sh`
 	 - `scripts/test-phase3-cmk.sh`
-5. After phased validation, use full `terraform plan -var-file=demo.tfvars` and `terraform apply -var-file=demo.tfvars` for convergence checks.
+	 - `scripts/test-phase4-storage-cmk-tls.sh`
+5. After phased validation, use full `terraform plan -var-file=demo.tfvars` and `terraform apply -var-file=demo.tfvars` only from an environment that can reach the private data plane. From a public workstation after Phase 4 lockdown, use `terraform plan -refresh=false -var-file=demo.tfvars` for convergence checks and the phase gate scripts for refreshed validation.
 6. (Optional) Run `scripts/populate-source-fileshare.sh` or `scripts/populate-source-datalake.sh` to add demo data
 7. (Optional) Use `scripts/toggle-trigger.sh start|stop` or `scripts/toggle-datalake-trigger.sh start|stop` to control the scheduled pipelines
 
@@ -68,11 +72,12 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 - Phase test scripts must be self-contained: each later phase script bootstraps all prerequisite phases internally before validating its own phase.
 - Phase test scripts use a standard cleanup interface:
 	- `--cleanup-phase`: destroy only the current phase resources
-	- `--cleanup-all`: destroy current phase and all prerequisite phases; implies `--cleanup-phase`
-- Azure Key Vault delete is asynchronous. Test scripts should signal clearly when the portal no longer shows the vault but Terraform is still waiting on ARM finalization.
+	- `--cleanup-all`: destroy additional higher-phase resources when possible, but do not destroy Key Vaults or their prerequisite infrastructure once Phase 2 has been applied
 - Key Vaults use RBAC authorization, so any phase that creates keys must explicitly grant the deploying principal sufficient Key Vault RBAC before creating CMKs.
 - Phase 3 currently uses `hashicorp/time` waits to reduce Key Vault RBAC propagation flakiness before CMK creation.
 - Because Key Vault key creation is a data-plane operation, the Phase 3 local test script temporarily enables public access for the caller's detected public IP, creates/validates CMKs, then restores Key Vault public access to disabled before the run completes.
+- Phase 4 relies on Key Vault trusted service bypass (`AzureServices`) so storage accounts can perform CMK operations while Key Vault public network access remains disabled.
+- Because Phase 4 requires purge-protected Key Vaults for storage CMK binding, phase test scripts no longer attempt to destroy Key Vaults once Phase 2 has been applied.
 - Scripts are provided for demo data, trigger management, and per-phase validation
 
 ## Integration Points
@@ -83,8 +88,7 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 
 ## Next Steps
 - Update this file if you add new modules, workflows, or architectural changes
-- Planned remaining phases after Phase 3:
-	- Phase 4: Storage accounts with CMK binding and TLS validation
+- Planned remaining phases after Phase 4:
 	- Phase 5: Data Factory CMK enablement
 	- Phase 6: Key Vault-backed linked service secret references
 	- Phase 7: Operational script updates to use Key Vault-hosted secrets

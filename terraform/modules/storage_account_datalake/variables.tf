@@ -17,3 +17,27 @@ variable "filesystem_name" {
   description = "The name of the Data Lake Gen2 filesystem (container)."
   type        = string
 }
+
+variable "min_tls_version" {
+  description = "Minimum TLS version for the Data Lake storage account."
+  type        = string
+  default     = "TLS1_2"
+}
+
+variable "public_network_access_enabled" {
+  description = "Enable or disable public network access for the Data Lake storage account."
+  type        = bool
+  default     = false
+}
+
+variable "filesystem_create_wait" {
+  description = "Delay before filesystem operations to allow storage network/public-access changes to propagate to the DFS endpoint."
+  type        = string
+  default     = "45s"
+}
+
+variable "create_filesystem" {
+  description = "Whether to create the Data Lake filesystem resource."
+  type        = bool
+  default     = true
+}

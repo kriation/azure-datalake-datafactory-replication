@@ -104,6 +104,7 @@ module "eastus2_key_vault" {
   soft_delete_retention_days     = var.key_vault_soft_delete_retention_days
   purge_protection_enabled       = var.key_vault_purge_protection_enabled
   public_network_access_enabled  = var.key_vault_public_network_access_enabled
+  bypass                         = var.key_vault_bypass
   ip_rules                       = var.key_vault_ip_rules
   providers = {
     azurerm = azurerm.eastus2
@@ -122,6 +123,7 @@ module "canadaeast_key_vault" {
   soft_delete_retention_days     = var.key_vault_soft_delete_retention_days
   purge_protection_enabled       = var.key_vault_purge_protection_enabled
   public_network_access_enabled  = var.key_vault_public_network_access_enabled
+  bypass                         = var.key_vault_bypass
   ip_rules                       = var.key_vault_ip_rules
   providers = {
     azurerm = azurerm.canadaeast
@@ -133,6 +135,8 @@ module "eastus2_storage" {
   name                = var.eastus2_storage_name
   resource_group_name = module.eastus2_rg.name
   location            = module.eastus2_rg.location
+  min_tls_version     = var.storage_min_tls_version
+  public_network_access_enabled = var.storage_public_network_access_enabled
   providers = {
     azurerm = azurerm.eastus2
   }
@@ -143,6 +147,8 @@ module "canadaeast_storage" {
   name                = var.canadaeast_storage_name
   resource_group_name = module.canadaeast_rg.name
   location            = module.canadaeast_rg.location
+  min_tls_version     = var.storage_min_tls_version
+  public_network_access_enabled = var.storage_public_network_access_enabled
   providers = {
     azurerm = azurerm.canadaeast
   }
@@ -257,6 +263,9 @@ module "eastus2_datalake" {
   resource_group_name   = module.eastus2_rg.name
   location              = module.eastus2_rg.location
   filesystem_name       = var.eastus2_datalake_filesystem_name
+  create_filesystem     = var.create_datalake_filesystems
+  min_tls_version       = var.storage_min_tls_version
+  public_network_access_enabled = var.storage_public_network_access_enabled
   providers = {
     azurerm = azurerm.eastus2
   }
@@ -268,7 +277,85 @@ module "canadaeast_datalake" {
   resource_group_name   = module.canadaeast_rg.name
   location              = module.canadaeast_rg.location
   filesystem_name       = var.canadaeast_datalake_filesystem_name
+  create_filesystem     = var.create_datalake_filesystems
+  min_tls_version       = var.storage_min_tls_version
+  public_network_access_enabled = var.storage_public_network_access_enabled
   providers = {
     azurerm = azurerm.canadaeast
   }
+}
+
+resource "azurerm_role_assignment" "eastus2_storage_key_vault_crypto_user" {
+  scope                = module.eastus2_key_vault.id
+  role_definition_name = var.key_vault_crypto_user_role_definition_name
+  principal_id         = module.eastus2_storage.principal_id
+}
+
+resource "azurerm_role_assignment" "eastus2_datalake_key_vault_crypto_user" {
+  scope                = module.eastus2_key_vault.id
+  role_definition_name = var.key_vault_crypto_user_role_definition_name
+  principal_id         = module.eastus2_datalake.principal_id
+}
+
+resource "azurerm_role_assignment" "canadaeast_storage_key_vault_crypto_user" {
+  scope                = module.canadaeast_key_vault.id
+  role_definition_name = var.key_vault_crypto_user_role_definition_name
+  principal_id         = module.canadaeast_storage.principal_id
+}
+
+resource "azurerm_role_assignment" "canadaeast_datalake_key_vault_crypto_user" {
+  scope                = module.canadaeast_key_vault.id
+  role_definition_name = var.key_vault_crypto_user_role_definition_name
+  principal_id         = module.canadaeast_datalake.principal_id
+}
+
+resource "time_sleep" "storage_key_vault_rbac_propagation" {
+  create_duration = var.key_vault_role_assignment_propagation_wait
+
+  depends_on = [
+    azurerm_role_assignment.eastus2_storage_key_vault_crypto_user,
+    azurerm_role_assignment.eastus2_datalake_key_vault_crypto_user,
+    azurerm_role_assignment.canadaeast_storage_key_vault_crypto_user,
+    azurerm_role_assignment.canadaeast_datalake_key_vault_crypto_user,
+  ]
+}
+
+resource "azurerm_storage_account_customer_managed_key" "eastus2_storage_cmk_binding" {
+  storage_account_id = module.eastus2_storage.id
+  key_vault_key_id   = module.eastus2_encryption_keys.versionless_key_ids[var.eastus2_storage_cmk_name]
+
+  depends_on = [
+    time_sleep.storage_key_vault_rbac_propagation,
+    module.eastus2_encryption_keys,
+  ]
+}
+
+resource "azurerm_storage_account_customer_managed_key" "eastus2_datalake_cmk_binding" {
+  storage_account_id = module.eastus2_datalake.storage_account_id
+  key_vault_key_id   = module.eastus2_encryption_keys.versionless_key_ids[var.eastus2_datalake_cmk_name]
+
+  depends_on = [
+    time_sleep.storage_key_vault_rbac_propagation,
+    module.eastus2_encryption_keys,
+  ]
+}
+
+resource "azurerm_storage_account_customer_managed_key" "canadaeast_storage_cmk_binding" {
+  storage_account_id = module.canadaeast_storage.id
+  key_vault_key_id   = module.canadaeast_encryption_keys.versionless_key_ids[var.canadaeast_storage_cmk_name]
+
+  depends_on = [
+    time_sleep.storage_key_vault_rbac_propagation,
+    module.canadaeast_encryption_keys,
+  ]
+}
+
+resource "azurerm_storage_account_customer_managed_key" "canadaeast_datalake_cmk_binding" {
+  storage_account_id = module.canadaeast_datalake.storage_account_id
+  key_vault_key_id   = module.canadaeast_encryption_keys.versionless_key_ids[var.canadaeast_datalake_cmk_name]
+
+  depends_on = [
+    time_sleep.storage_key_vault_rbac_propagation,
+    module.canadaeast_encryption_keys,
+  ]
 }

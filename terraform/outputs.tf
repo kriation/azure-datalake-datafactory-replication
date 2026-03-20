@@ -90,6 +90,54 @@ output "canadaeast_data_factory_cmk_key_id" {
   value = module.canadaeast_encryption_keys.versionless_key_ids[var.canadaeast_data_factory_cmk_name]
 }
 
+output "eastus2_storage_public_network_access_enabled" {
+  value = module.eastus2_storage.public_network_access_enabled
+}
+
+output "canadaeast_storage_public_network_access_enabled" {
+  value = module.canadaeast_storage.public_network_access_enabled
+}
+
+output "eastus2_datalake_public_network_access_enabled" {
+  value = module.eastus2_datalake.public_network_access_enabled
+}
+
+output "canadaeast_datalake_public_network_access_enabled" {
+  value = module.canadaeast_datalake.public_network_access_enabled
+}
+
+output "eastus2_storage_min_tls_version" {
+  value = module.eastus2_storage.min_tls_version
+}
+
+output "canadaeast_storage_min_tls_version" {
+  value = module.canadaeast_storage.min_tls_version
+}
+
+output "eastus2_datalake_min_tls_version" {
+  value = module.eastus2_datalake.min_tls_version
+}
+
+output "canadaeast_datalake_min_tls_version" {
+  value = module.canadaeast_datalake.min_tls_version
+}
+
+output "eastus2_storage_cmk_binding_id" {
+  value = azurerm_storage_account_customer_managed_key.eastus2_storage_cmk_binding.id
+}
+
+output "eastus2_datalake_cmk_binding_id" {
+  value = azurerm_storage_account_customer_managed_key.eastus2_datalake_cmk_binding.id
+}
+
+output "canadaeast_storage_cmk_binding_id" {
+  value = azurerm_storage_account_customer_managed_key.canadaeast_storage_cmk_binding.id
+}
+
+output "canadaeast_datalake_cmk_binding_id" {
+  value = azurerm_storage_account_customer_managed_key.canadaeast_datalake_cmk_binding.id
+}
+
 output "eastus2_storage_name" {
   value = module.eastus2_storage.name
 }

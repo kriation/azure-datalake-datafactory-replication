@@ -301,6 +301,30 @@ resource "azurerm_data_factory_customer_managed_key" "canadaeast_data_factory_cm
   ]
 }
 
+# Phase 8: Managed Private Endpoints for secure fileshare access from managed VNet IR
+# Note: Managed integration runtime created via ARM template in pipeline deployment
+resource "azurerm_data_factory_managed_private_endpoint" "source_fileshare" {
+  name                = "adf-source-fileshare-pe"
+  data_factory_id     = module.data_factory_identity.id
+  target_resource_id  = module.eastus2_storage.id
+  subresource_name    = "file"
+
+  depends_on = [
+    module.data_factory,
+  ]
+}
+
+resource "azurerm_data_factory_managed_private_endpoint" "dest_fileshare" {
+  name                = "adf-dest-fileshare-pe"
+  data_factory_id     = module.data_factory_identity.id
+  target_resource_id  = module.canadaeast_storage.id
+  subresource_name    = "file"
+
+  depends_on = [
+    module.data_factory,
+  ]
+}
+
 # Data Lake Gen2 Storage Accounts and Filesystems
 module "eastus2_datalake" {
   source                = "./modules/storage_account_datalake"

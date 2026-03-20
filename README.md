@@ -140,6 +140,20 @@ Validate Phase 7 before continuing:
     - The script restores Key Vault and storage public network access to `Disabled` at exit
     - Script arguments support overriding the Key Vault name and secret name for environment portability
 
+**Step 7d: Phase 8 Gate - Managed Virtual Network IR for Fileshare Replication (IN PROGRESS)**
+
+Phase 8 infrastructure is deployed and provides the foundation for secure fileshare replication under Phase 4 lockdown:
+    - Managed Virtual Network integration runtime `adf-managed-ir` is created in Data Factory
+    - Managed private endpoints are configured for source (East US 2) and destination (Canada East) fileshare storage accounts
+    - Fileshare linked services are updated to route through the managed IR via `connectVia` property
+
+Completion requires:
+    - Approval of managed private endpoint connections from the storage account's private endpoint settings
+    - Verification that Data Factory pipeline triggers can reach fileshare storage via managed private connectivity
+    - Full replication health validation with both fileshare and datalake pipelines passing
+
+Once Phase 8 is complete, end-to-end replication will be secure and operational under Phase 4 public network lockdown.
+
 **Step 8: (Optional) Automated Phase 1 Gate Test**
 
 Run a single command that performs deploy, validation, and destroy for the

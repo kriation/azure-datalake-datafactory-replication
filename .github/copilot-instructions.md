@@ -24,7 +24,8 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 	- Phase 4: Storage accounts with CMK binding, TLS1_2 policy validation, and disabled public network access
 	- Phase 5: Data Factory CMK enablement
 	- Phase 6: Key Vault-backed linked service secret references
-	- Phase 7: Operational script updates to use Key Vault-hosted secrets
+	- Phase 7: Operational script updates to use Key Vault-hosted secrets (COMPLETE)
+	- Phase 8: Managed Virtual Network integration runtime for secure fileshare replication (IN PROGRESS)
 - All Data Factory objects (linked services, datasets, pipelines, triggers) are managed via a parameterized ARM template for full repeatability and UI compatibility. **Resource ordering and case-sensitive naming are critical for successful deployment.**
 - Scripts in the `scripts/` directory support demo data population and trigger management.
 - Terraform uses a single local state, but build-time validation uses staged `-target` applies in dependency order. Steady-state usage remains full `terraform plan` and `terraform apply`.
@@ -100,7 +101,9 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 - Update this file if you add new modules, workflows, or architectural changes
 
 
-- Planned remaining phases after Phase 7:
-	- Phase 8: Full-stack convergence and replication smoke tests
+- Planned remaining phases after Phase 8:
+	- Phase 9: End-to-end replication validation and operational runbooks
+- Current Phase 8 status: Infrastructure deployed; pending approval of managed private endpoints and replication validation
+- To complete Phase 8: Review private endpoint approval flow in storage account settings and approve managed private endpoints from the ADF managed VNet
 - If you encounter ARM template errors, check for case-sensitive name mismatches and resource ordering in pipeline.json.
 - See `README.md` for phased deployment and validation details

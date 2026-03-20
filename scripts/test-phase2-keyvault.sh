@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # test-phase2-keyvault.sh
-# Deploys, validates, and destroys Phase 2 Key Vault foundation resources.
+# Deploys and validates Phase 2 Key Vault foundation resources.
 
 set -euo pipefail
 
@@ -8,10 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TF_DIR="$REPO_ROOT/terraform"
 TFVARS_FILE="demo.tfvars"
-KEEP_RESOURCES=false
 CLEANUP_ALL=false
 AUTO_APPROVE=true
-DEPLOYED=false
 CLEANUP_PHASE=false
 
 usage() {
@@ -20,9 +18,8 @@ Usage: $(basename "$0") [options]
 
 Options:
   -f, --tfvars FILE      Terraform var-file name under terraform/ (default: demo.tfvars)
-  -k, --keep             Keep deployed resources (skip destroy)
-  --cleanup-phase        Destroy Phase 2 resources only (skip deploy/validate)
-  --cleanup-all          Destroy Phase 2 and all Phase 1 prerequisites (implies --cleanup-phase)
+  --cleanup-phase        No-op: Key Vaults are permanent once created with purge protection
+  --cleanup-all          No-op: Key Vaults and prerequisites are permanent once Phase 2 is applied
   --no-auto-approve      Disable -auto-approve in terraform apply/destroy
   -h, --help             Show this help
 
@@ -39,10 +36,6 @@ while [[ $# -gt 0 ]]; do
     -f|--tfvars)
       TFVARS_FILE="$2"
       shift 2
-      ;;
-    -k|--keep)
-      KEEP_RESOURCES=true
-      shift
       ;;
     --cleanup-phase)
       CLEANUP_PHASE=true
@@ -95,88 +88,10 @@ tf() {
   terraform -chdir="$TF_DIR" "$@"
 }
 
-# Pre-apply guard: detect soft-deleted vaults that would block re-deployment with same names.
-check_soft_deleted_vaults() {
-  local vault_names=("$@")
-  local blocked=false
-
-  for vault_name in "${vault_names[@]}"; do
-    if [[ -z "$vault_name" ]]; then continue; fi
-    local deleted_location
-    deleted_location="$(az keyvault list-deleted --query "[?name=='$vault_name'] | [0].properties.location" -o tsv 2>/dev/null || true)"
-    if [[ -n "$deleted_location" && "$deleted_location" != "null" ]]; then
-      echo "[ERROR] Key Vault '$vault_name' exists in a soft-deleted state and will block deployment."
-      echo "        Azure holds the name reservation for the soft-delete retention period (${key_vault_soft_delete_retention_days:-7} days)."
-      echo "        To release the name now, run:"
-      echo "          az keyvault purge --name '$vault_name' --location '$deleted_location'"
-      blocked=true
-    fi
-  done
-
-  if [[ "$blocked" == true ]]; then
-    echo "[ERROR] Resolve soft-deleted vault(s) above before re-deploying."
-    exit 1
-  fi
+cleanup_not_supported() {
+  echo "[INFO] Phase 2 cleanup is disabled: purge-protected Key Vaults are permanent once created."
+  echo "[INFO] To start fresh, use new Key Vault names in demo.tfvars (the old names remain reserved for the soft-delete retention period)."
 }
-
-destroy_phase2() {
-  echo "[INFO] Destroying Phase 2 key vault modules..."
-  echo "[INFO] Note: Azure Key Vault delete is asynchronous. The vault will disappear from"
-  echo "        the portal quickly, but Terraform waits for ARM operation finalization"
-  echo "        (up to the configured timeout). This is expected behavior — not a hang."
-
-  if tf destroy -target=module.eastus2_key_vault -target=module.canadaeast_key_vault -var-file="$TFVARS_FILE" "${TF_APPROVE_ARGS[@]}"; then
-    echo "[INFO] Phase 2 Key Vault modules destroyed successfully."
-  else
-    # Check whether the vaults actually no longer exist — timeout errors are benign.
-    local east_kv_name canada_kv_name
-    east_kv_name="$(tf output -raw eastus2_key_vault_name 2>/dev/null || true)"
-    canada_kv_name="$(tf output -raw canadaeast_key_vault_name 2>/dev/null || true)"
-    local east_gone=false canada_gone=false
-    az keyvault show --name "$east_kv_name" >/dev/null 2>&1 || east_gone=true
-    az keyvault show --name "$canada_kv_name" >/dev/null 2>&1 || canada_gone=true
-    if [[ "$east_gone" == true && "$canada_gone" == true ]]; then
-      echo "[INFO] Terraform reported an error, but both Key Vaults are confirmed removed"
-      echo "       from active resources. The error was likely an ARM finalization timeout"
-      echo "       and is safe to ignore for demo environments."
-    else
-      echo "[WARN] Terraform destroy reported an error and one or more vaults may still exist."
-      echo "       Re-run cleanup to retry: ./scripts/test-phase2-keyvault.sh --cleanup-all"
-    fi
-  fi
-
-  if [[ "$CLEANUP_ALL" == true ]]; then
-    echo "[INFO] Destroying Phase 1 network modules..."
-    tf destroy -target=module.eastus2_network -target=module.canadaeast_network -var-file="$TFVARS_FILE" "${TF_APPROVE_ARGS[@]}" || true
-
-    echo "[INFO] Destroying resource groups..."
-    tf destroy -target=module.eastus2_rg -target=module.canadaeast_rg -var-file="$TFVARS_FILE" "${TF_APPROVE_ARGS[@]}" || true
-  fi
-}
-
-cleanup() {
-  local exit_code="$1"
-
-  if [[ "$KEEP_RESOURCES" == true ]]; then
-    echo "[INFO] --keep set, skipping destroy."
-    return
-  fi
-
-  if [[ "$DEPLOYED" != true ]]; then
-    return
-  fi
-
-  echo "[INFO] Validation failed — rolling back Phase 2 deployment..."
-  destroy_phase2
-
-  if [[ "$exit_code" -eq 0 ]]; then
-    echo "[PASS] Phase 2 test completed and cleanup finished."
-  else
-    echo "[WARN] Phase 2 test failed; rollback attempted. Review errors above."
-  fi
-}
-
-trap 'cleanup $?' EXIT
 
 echo "[INFO] Initializing Terraform..."
 tf init -upgrade=false >/dev/null
@@ -187,8 +102,7 @@ if [[ "$CLEANUP_ALL" == true ]]; then
 fi
 
 if [[ "$CLEANUP_PHASE" == true ]]; then
-  destroy_phase2
-  echo "[PASS] Cleanup operation completed."
+  cleanup_not_supported
   exit 0
 fi
 
@@ -196,7 +110,27 @@ echo "[INFO] Applying Phase 1 prerequisites (resource groups + network)..."
 tf apply -target=module.eastus2_rg -target=module.canadaeast_rg -var-file="$TFVARS_FILE" "${TF_APPROVE_ARGS[@]}"
 tf apply -target=module.eastus2_network -target=module.canadaeast_network -var-file="$TFVARS_FILE" "${TF_APPROVE_ARGS[@]}"
 
-echo "[INFO] Checking for soft-deleted Key Vaults that would block deployment..."
+# Soft-deleted vault guard: detect names that would block re-deployment
+check_soft_deleted_vaults() {
+  local vault_names=("$@")
+  local blocked=false
+
+  for vault_name in "${vault_names[@]}"; do
+    if [[ -z "$vault_name" ]]; then continue; fi
+    local deleted_location
+    deleted_location="$(az keyvault list-deleted --query "[?name=='$vault_name'] | [0].properties.location" -o tsv 2>/dev/null || true)"
+    if [[ -n "$deleted_location" && "$deleted_location" != "null" ]]; then
+      echo "[ERROR] Key Vault '$vault_name' is soft-deleted and its name is reserved. To release it:"
+      echo "          az keyvault purge --name '$vault_name' --location '$deleted_location'"
+      blocked=true
+    fi
+  done
+
+  if [[ "$blocked" == true ]]; then
+    echo "[ERROR] Resolve soft-deleted vault(s) above before re-deploying."
+    exit 1
+  fi
+}
 EAST_KV_NAME_CHECK="$(tf output -raw eastus2_key_vault_name 2>/dev/null || true)"
 CANADA_KV_NAME_CHECK="$(tf output -raw canadaeast_key_vault_name 2>/dev/null || true)"
 # Fall back to tfvars values if state is empty (fresh environment)
@@ -206,7 +140,6 @@ check_soft_deleted_vaults "$EAST_KV_NAME_CHECK" "$CANADA_KV_NAME_CHECK"
 
 echo "[INFO] Applying Phase 2 key vault modules..."
 tf apply -target=module.eastus2_key_vault -target=module.canadaeast_key_vault -var-file="$TFVARS_FILE" "${TF_APPROVE_ARGS[@]}"
-DEPLOYED=true
 
 echo "[INFO] Collecting outputs for validation..."
 EAST_RG="$(tf output -raw eastus2_rg_name)"

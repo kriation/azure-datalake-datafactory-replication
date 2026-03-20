@@ -8,10 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TF_DIR="$REPO_ROOT/terraform"
 TFVARS_FILE="demo.tfvars"
-KEEP_RESOURCES=false
 CLEANUP_ALL=false
 AUTO_APPROVE=true
-DEPLOYED=false
 CLEANUP_PHASE=false
 
 usage() {
@@ -20,15 +18,13 @@ Usage: $(basename "$0") [options]
 
 Options:
   -f, --tfvars FILE      Terraform var-file name under terraform/ (default: demo.tfvars)
-  -k, --keep             Keep deployed resources (skip destroy)
-  --cleanup-phase        Destroy Phase 1 networks only (skip deploy/validate)
-  --cleanup-all          Destroy Phase 1 networks and resource groups (implies --cleanup-phase)
+  --cleanup-phase        Destroy Phase 1 networks only (skip deploy/validate; blocked if Key Vaults exist)
+  --cleanup-all          Destroy Phase 1 networks and resource groups (blocked if Key Vaults exist)
   --no-auto-approve      Disable -auto-approve in terraform apply/destroy
   -h, --help             Show this help
 
 Examples:
   ./scripts/test-phase1-network.sh
-  ./scripts/test-phase1-network.sh --tfvars demo.tfvars --keep
   ./scripts/test-phase1-network.sh --cleanup-phase
   ./scripts/test-phase1-network.sh --cleanup-all
 EOF
@@ -39,10 +35,6 @@ while [[ $# -gt 0 ]]; do
     -f|--tfvars)
       TFVARS_FILE="$2"
       shift 2
-      ;;
-    -k|--keep)
-      KEEP_RESOURCES=true
-      shift
       ;;
     --cleanup-phase)
       CLEANUP_PHASE=true
@@ -95,7 +87,31 @@ tf() {
   terraform -chdir="$TF_DIR" "$@"
 }
 
+phase2_key_vaults_exist() {
+  local east_kv_name canada_kv_name
+
+  east_kv_name="$(grep 'eastus2_key_vault_name' "$TFVARS_PATH" | awk -F'"' '{print $2}')"
+  canada_kv_name="$(grep 'canadaeast_key_vault_name' "$TFVARS_PATH" | awk -F'"' '{print $2}')"
+
+  if [[ -n "$east_kv_name" ]] && az keyvault show --name "$east_kv_name" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ -n "$canada_kv_name" ]] && az keyvault show --name "$canada_kv_name" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  return 1
+}
+
 destroy_phase1() {
+  if phase2_key_vaults_exist; then
+    echo "[WARN] Phase 1 cleanup is blocked: retained Key Vaults exist in this environment."
+    echo "       Teardown here would risk cascading into Key Vault deletion via resource group removal."
+    echo "       To proceed, first purge the soft-deleted Key Vaults manually, then re-run."
+    return
+  fi
+
   echo "[INFO] Destroying Phase 1 network modules..."
   tf destroy -target=module.eastus2_network -target=module.canadaeast_network -var-file="$TFVARS_FILE" "${TF_APPROVE_ARGS[@]}" || true
 
@@ -104,29 +120,6 @@ destroy_phase1() {
     tf destroy -target=module.eastus2_rg -target=module.canadaeast_rg -var-file="$TFVARS_FILE" "${TF_APPROVE_ARGS[@]}" || true
   fi
 }
-
-cleanup() {
-  local exit_code="$1"
-
-  if [[ "$KEEP_RESOURCES" == true ]]; then
-    echo "[INFO] --keep set, skipping destroy."
-    return
-  fi
-
-  if [[ "$DEPLOYED" != true ]]; then
-    return
-  fi
-
-  destroy_phase1
-
-  if [[ "$exit_code" -eq 0 ]]; then
-    echo "[PASS] Phase 1 test completed and cleanup finished."
-  else
-    echo "[WARN] Phase 1 test failed; cleanup attempted."
-  fi
-}
-
-trap 'cleanup $?' EXIT
 
 echo "[INFO] Initializing Terraform..."
 tf init -upgrade=false >/dev/null
@@ -147,7 +140,6 @@ tf apply -target=module.eastus2_rg -target=module.canadaeast_rg -var-file="$TFVA
 
 echo "[INFO] Applying regional networking (Phase 1 sequence B)..."
 tf apply -target=module.eastus2_network -target=module.canadaeast_network -var-file="$TFVARS_FILE" "${TF_APPROVE_ARGS[@]}"
-DEPLOYED=true
 
 echo "[INFO] Collecting Terraform outputs for validation..."
 EAST_RG="$(tf output -raw eastus2_rg_name)"

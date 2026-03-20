@@ -31,7 +31,7 @@ Options:
   -f, --tfvars FILE      Terraform var-file name under terraform/ (default: demo.tfvars)
   -k, --keep             Keep deployed resources (skip destroy)
   --cleanup-phase        Destroy Phase 3 resources only (skip deploy/validate)
-  --cleanup-all          Destroy Phase 3 and all prior prerequisites (implies --cleanup-phase)
+  --cleanup-all          Destroy Phase 3 resources and retain Phase 2+ infrastructure (implies --cleanup-phase)
   --no-auto-approve      Disable -auto-approve in terraform apply/destroy
   -h, --help             Show this help
 
@@ -283,26 +283,8 @@ destroy_phase3() {
     "${TF_APPROVE_ARGS[@]}" || true
 
   if [[ "$CLEANUP_ALL" == true ]]; then
-    echo "[INFO] Destroying Phase 2 key vault modules..."
-    tf destroy \
-      -target=module.eastus2_key_vault \
-      -target=module.canadaeast_key_vault \
-      -var-file="$TFVARS_FILE" \
-      "${TF_APPROVE_ARGS[@]}" || true
-
-    echo "[INFO] Destroying Phase 1 network modules..."
-    tf destroy \
-      -target=module.eastus2_network \
-      -target=module.canadaeast_network \
-      -var-file="$TFVARS_FILE" \
-      "${TF_APPROVE_ARGS[@]}" || true
-
-    echo "[INFO] Destroying resource groups..."
-    tf destroy \
-      -target=module.eastus2_rg \
-      -target=module.canadaeast_rg \
-      -var-file="$TFVARS_FILE" \
-      "${TF_APPROVE_ARGS[@]}" || true
+    echo "[INFO] --cleanup-all requested, but Phase 2+ infrastructure is retained once Key Vaults exist."
+    echo "[INFO] Skipping Key Vault, network, and resource group teardown."
   fi
 }
 

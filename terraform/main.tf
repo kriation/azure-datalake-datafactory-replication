@@ -271,6 +271,8 @@ module "data_factory" {
   data_factory_principal_id = module.data_factory_identity.principal_id
   source_storage_account = module.eastus2_storage.name
   dest_storage_account   = module.canadaeast_storage.name
+  source_fileshare_storage_resource_id = module.eastus2_storage.id
+  dest_fileshare_storage_resource_id   = module.canadaeast_storage.id
   key_vault_uri = module.canadaeast_key_vault.vault_uri
   source_fileshare_connection_secret_name = azurerm_key_vault_secret.adf_source_fileshare_connection_string.name
   dest_fileshare_connection_secret_name   = azurerm_key_vault_secret.adf_dest_fileshare_connection_string.name
@@ -298,30 +300,6 @@ resource "azurerm_data_factory_customer_managed_key" "canadaeast_data_factory_cm
     module.data_factory_identity,
     module.canadaeast_encryption_keys,
     time_sleep.canadaeast_key_vault_rbac_propagation,
-  ]
-}
-
-# Phase 8: Managed Private Endpoints for secure fileshare access from managed VNet IR
-# Note: Managed integration runtime created via ARM template in pipeline deployment
-resource "azurerm_data_factory_managed_private_endpoint" "source_fileshare" {
-  name                = "adf-source-fileshare-pe"
-  data_factory_id     = module.data_factory_identity.id
-  target_resource_id  = module.eastus2_storage.id
-  subresource_name    = "file"
-
-  depends_on = [
-    module.data_factory,
-  ]
-}
-
-resource "azurerm_data_factory_managed_private_endpoint" "dest_fileshare" {
-  name                = "adf-dest-fileshare-pe"
-  data_factory_id     = module.data_factory_identity.id
-  target_resource_id  = module.canadaeast_storage.id
-  subresource_name    = "file"
-
-  depends_on = [
-    module.data_factory,
   ]
 }
 

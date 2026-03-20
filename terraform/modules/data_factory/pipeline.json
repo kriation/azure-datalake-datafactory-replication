@@ -1,1 +1,375 @@
-{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#","contentVersion":"1.0.0.0","parameters":{"factoryName":{"type":"String"},"keyVaultBaseUrl":{"type":"String"},"sourceFileshareConnectionSecretName":{"type":"String"},"destFileshareConnectionSecretName":{"type":"String"},"sourceDatalakeAccountName":{"type":"String"},"destDatalakeAccountName":{"type":"String"},"sourceDatalakeFilesystem":{"type":"String"},"destDatalakeFilesystem":{"type":"String"}},"resources":[{"type":"Microsoft.DataFactory/factories/managedVirtualNetworks","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/default')]","properties":{}},{"type":"Microsoft.DataFactory/factories/integrationruntimes","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/adf-managed-ir')]","dependsOn":["[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/managedVirtualNetworks/default')]"],"properties":{"type":"Managed","managedVirtualNetworkReference":{"referenceName":"default","type":"ManagedVirtualNetworkReference"},"typeProperties":{"computeProperties":{"location":"Canada East","dataFlowProperties":{"computeType":"General","coreCount":8,"timeToLive":10}}}}},{"type":"Microsoft.DataFactory/factories/linkedservices","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/adf-keyvault')]","properties":{"type":"AzureKeyVault","typeProperties":{"baseUrl":"[parameters('keyVaultBaseUrl')]"}}},{"type":"Microsoft.DataFactory/factories/linkedservices","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/source-fileshare')]","dependsOn":["[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/adf-keyvault')]","[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/integrationruntimes/adf-managed-ir')]"],"properties":{"type":"AzureFileStorage","connectVia":{"referenceName":"adf-managed-ir","type":"IntegrationRuntimeReference"},"typeProperties":{"connectionString":{"type":"AzureKeyVaultSecret","store":{"referenceName":"adf-keyvault","type":"LinkedServiceReference"},"secretName":"[parameters('sourceFileshareConnectionSecretName')]"},"fileShare":"fileshare"}}},{"type":"Microsoft.DataFactory/factories/linkedservices","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/source-datalake')]","properties":{"type":"AzureBlobFS","typeProperties":{"url":"[concat('https://', parameters('sourceDatalakeAccountName'), '.dfs.core.windows.net')]"}}},{"type":"Microsoft.DataFactory/factories/linkedservices","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/dest-datalake')]","properties":{"type":"AzureBlobFS","typeProperties":{"url":"[concat('https://', parameters('destDatalakeAccountName'), '.dfs.core.windows.net')]"}}},{"type":"Microsoft.DataFactory/factories/linkedservices","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/dest-fileshare')]","dependsOn":["[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/adf-keyvault')]","[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/integrationruntimes/adf-managed-ir')]"],"properties":{"type":"AzureFileStorage","connectVia":{"referenceName":"adf-managed-ir","type":"IntegrationRuntimeReference"},"typeProperties":{"connectionString":{"type":"AzureKeyVaultSecret","store":{"referenceName":"adf-keyvault","type":"LinkedServiceReference"},"secretName":"[parameters('destFileshareConnectionSecretName')]"},"fileShare":"fileshare"}}},{"type":"Microsoft.DataFactory/factories/datasets","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/source-fileshare')]","dependsOn":["[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/source-fileshare')]"],"properties":{"linkedServiceName":{"referenceName":"source-fileshare","type":"LinkedServiceReference"},"type":"AzureFile","typeProperties":{"folderPath":"/"}}},{"type":"Microsoft.DataFactory/factories/datasets","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/source-datalake')]","dependsOn":["[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/source-datalake')]"],"properties":{"linkedServiceName":{"referenceName":"source-datalake","type":"LinkedServiceReference"},"type":"AzureBlobFSDataset","typeProperties":{"folderPath":"[parameters('sourceDatalakeFilesystem')]"}}},{"type":"Microsoft.DataFactory/factories/datasets","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/dest-datalake')]","dependsOn":["[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/dest-datalake')]"],"properties":{"linkedServiceName":{"referenceName":"dest-datalake","type":"LinkedServiceReference"},"type":"AzureBlobFSDataset","typeProperties":{"folderPath":"[parameters('destDatalakeFilesystem')]"}}},{"type":"Microsoft.DataFactory/factories/datasets","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/dest-fileshare')]","dependsOn":["[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/dest-fileshare')]"],"properties":{"linkedServiceName":{"referenceName":"dest-fileshare","type":"LinkedServiceReference"},"type":"AzureFile","typeProperties":{"folderPath":"/"}}},{"type":"Microsoft.DataFactory/factories/pipelines","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/copyfilesharepipeline')]","dependsOn":["[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source-fileshare')]","[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest-fileshare')]"],"properties":{"activities":[{"name":"CopyFiles","type":"Copy","dependsOn":[],"policy":{"timeout":"7.00:00:00","retry":0},"typeProperties":{"source":{"type":"FileSystemSource","recursive":true},"sink":{"type":"FileSystemSink","copyBehavior":"PreserveHierarchy"},"enableStaging":false,"validateDataConsistency":false},"inputs":[{"referenceName":"source-fileshare","type":"DatasetReference"}],"outputs":[{"referenceName":"dest-fileshare","type":"DatasetReference"}]}]}},{"type":"Microsoft.DataFactory/factories/pipelines","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/copydatalakegen2pipeline')]","dependsOn":["[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source-datalake')]","[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest-datalake')]"],"properties":{"activities":[{"name":"CopyDataLakeGen2","type":"Copy","dependsOn":[],"policy":{"timeout":"7.00:00:00","retry":0},"typeProperties":{"source":{"type":"AzureBlobFSSource","recursive":true},"sink":{"type":"AzureBlobFSSink","copyBehavior":"PreserveHierarchy"},"enableStaging":false},"inputs":[{"referenceName":"source-datalake","type":"DatasetReference"}],"outputs":[{"referenceName":"dest-datalake","type":"DatasetReference"}]}]}},{"type":"Microsoft.DataFactory/factories/triggers","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/copyfilesharetrigger')]","dependsOn":["[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/copyfilesharepipeline')]"],"properties":{"type":"ScheduleTrigger","typeProperties":{"recurrence":{"frequency":"Minute","interval":5,"startTime":"2026-03-02T12:00:00Z"}},"pipelines":[{"pipelineReference":{"referenceName":"copyfilesharepipeline","type":"PipelineReference"}}]}},{"type":"Microsoft.DataFactory/factories/triggers","apiVersion":"2018-06-01","name":"[concat(parameters('factoryName'), '/copydatalakegen2trigger')]","dependsOn":["[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/copydatalakegen2pipeline')]"],"properties":{"type":"ScheduleTrigger","typeProperties":{"recurrence":{"frequency":"Minute","interval":5,"startTime":"2026-03-02T12:00:00Z"}},"pipelines":[{"pipelineReference":{"referenceName":"copydatalakegen2pipeline","type":"PipelineReference"}}]}}]}
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "factoryName": { "type": "String" },
+    "keyVaultBaseUrl": { "type": "String" },
+    "sourceFileshareConnectionSecretName": { "type": "String" },
+    "destFileshareConnectionSecretName": { "type": "String" },
+    "sourceFileshareStorageResourceId": { "type": "String" },
+    "destFileshareStorageResourceId": { "type": "String" },
+    "sourceDatalakeAccountName": { "type": "String" },
+    "destDatalakeAccountName": { "type": "String" },
+    "sourceDatalakeFilesystem": { "type": "String" },
+    "destDatalakeFilesystem": { "type": "String" }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.DataFactory/factories/managedVirtualNetworks",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/default')]",
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/managedVirtualNetworks/managedPrivateEndpoints",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/default/adf-source-fileshare-pe')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/managedVirtualNetworks/default')]"
+      ],
+      "properties": {
+        "groupId": "file",
+        "privateLinkResourceId": "[parameters('sourceFileshareStorageResourceId')]"
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/managedVirtualNetworks/managedPrivateEndpoints",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/default/adf-dest-fileshare-pe')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/managedVirtualNetworks/default')]"
+      ],
+      "properties": {
+        "groupId": "file",
+        "privateLinkResourceId": "[parameters('destFileshareStorageResourceId')]"
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/integrationruntimes",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/adf-managed-ir')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/managedVirtualNetworks/default')]"
+      ],
+      "properties": {
+        "type": "Managed",
+        "managedVirtualNetworkReference": {
+          "referenceName": "default",
+          "type": "ManagedVirtualNetworkReference"
+        },
+        "typeProperties": {
+          "computeProperties": {
+            "location": "Canada East",
+            "dataFlowProperties": {
+              "computeType": "General",
+              "coreCount": 8,
+              "timeToLive": 10
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/linkedservices",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/adf-keyvault')]",
+      "properties": {
+        "type": "AzureKeyVault",
+        "typeProperties": {
+          "baseUrl": "[parameters('keyVaultBaseUrl')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/linkedservices",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/source-fileshare')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/adf-keyvault')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/integrationruntimes/adf-managed-ir')]"
+      ],
+      "properties": {
+        "type": "AzureFileStorage",
+        "connectVia": {
+          "referenceName": "adf-managed-ir",
+          "type": "IntegrationRuntimeReference"
+        },
+        "typeProperties": {
+          "connectionString": {
+            "type": "AzureKeyVaultSecret",
+            "store": {
+              "referenceName": "adf-keyvault",
+              "type": "LinkedServiceReference"
+            },
+            "secretName": "[parameters('sourceFileshareConnectionSecretName')]"
+          },
+          "fileShare": "fileshare"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/linkedservices",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/source-datalake')]",
+      "properties": {
+        "type": "AzureBlobFS",
+        "typeProperties": {
+          "url": "[concat('https://', parameters('sourceDatalakeAccountName'), '.dfs.core.windows.net')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/linkedservices",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/dest-datalake')]",
+      "properties": {
+        "type": "AzureBlobFS",
+        "typeProperties": {
+          "url": "[concat('https://', parameters('destDatalakeAccountName'), '.dfs.core.windows.net')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/linkedservices",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/dest-fileshare')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/adf-keyvault')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/integrationruntimes/adf-managed-ir')]"
+      ],
+      "properties": {
+        "type": "AzureFileStorage",
+        "connectVia": {
+          "referenceName": "adf-managed-ir",
+          "type": "IntegrationRuntimeReference"
+        },
+        "typeProperties": {
+          "connectionString": {
+            "type": "AzureKeyVaultSecret",
+            "store": {
+              "referenceName": "adf-keyvault",
+              "type": "LinkedServiceReference"
+            },
+            "secretName": "[parameters('destFileshareConnectionSecretName')]"
+          },
+          "fileShare": "fileshare"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/source-fileshare')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/source-fileshare')]"
+      ],
+      "properties": {
+        "linkedServiceName": {
+          "referenceName": "source-fileshare",
+          "type": "LinkedServiceReference"
+        },
+        "type": "AzureFile",
+        "typeProperties": {
+          "folderPath": "/"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/source-datalake')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/source-datalake')]"
+      ],
+      "properties": {
+        "linkedServiceName": {
+          "referenceName": "source-datalake",
+          "type": "LinkedServiceReference"
+        },
+        "type": "AzureBlobFSDataset",
+        "typeProperties": {
+          "folderPath": "[parameters('sourceDatalakeFilesystem')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/dest-datalake')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/dest-datalake')]"
+      ],
+      "properties": {
+        "linkedServiceName": {
+          "referenceName": "dest-datalake",
+          "type": "LinkedServiceReference"
+        },
+        "type": "AzureBlobFSDataset",
+        "typeProperties": {
+          "folderPath": "[parameters('destDatalakeFilesystem')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/dest-fileshare')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/dest-fileshare')]"
+      ],
+      "properties": {
+        "linkedServiceName": {
+          "referenceName": "dest-fileshare",
+          "type": "LinkedServiceReference"
+        },
+        "type": "AzureFile",
+        "typeProperties": {
+          "folderPath": "/"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/pipelines",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/copyfilesharepipeline')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source-fileshare')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest-fileshare')]"
+      ],
+      "properties": {
+        "activities": [
+          {
+            "name": "CopyFiles",
+            "type": "Copy",
+            "dependsOn": [],
+            "policy": {
+              "timeout": "7.00:00:00",
+              "retry": 0
+            },
+            "typeProperties": {
+              "source": {
+                "type": "FileSystemSource",
+                "recursive": true
+              },
+              "sink": {
+                "type": "FileSystemSink",
+                "copyBehavior": "PreserveHierarchy"
+              },
+              "enableStaging": false,
+              "validateDataConsistency": false
+            },
+            "inputs": [
+              {
+                "referenceName": "source-fileshare",
+                "type": "DatasetReference"
+              }
+            ],
+            "outputs": [
+              {
+                "referenceName": "dest-fileshare",
+                "type": "DatasetReference"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/pipelines",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/copydatalakegen2pipeline')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source-datalake')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest-datalake')]"
+      ],
+      "properties": {
+        "activities": [
+          {
+            "name": "CopyDataLakeGen2",
+            "type": "Copy",
+            "dependsOn": [],
+            "policy": {
+              "timeout": "7.00:00:00",
+              "retry": 0
+            },
+            "typeProperties": {
+              "source": {
+                "type": "AzureBlobFSSource",
+                "recursive": true
+              },
+              "sink": {
+                "type": "AzureBlobFSSink",
+                "copyBehavior": "PreserveHierarchy"
+              },
+              "enableStaging": false
+            },
+            "inputs": [
+              {
+                "referenceName": "source-datalake",
+                "type": "DatasetReference"
+              }
+            ],
+            "outputs": [
+              {
+                "referenceName": "dest-datalake",
+                "type": "DatasetReference"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/triggers",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/copyfilesharetrigger')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/copyfilesharepipeline')]"
+      ],
+      "properties": {
+        "type": "ScheduleTrigger",
+        "typeProperties": {
+          "recurrence": {
+            "frequency": "Minute",
+            "interval": 5,
+            "startTime": "2026-03-02T12:00:00Z"
+          }
+        },
+        "pipelines": [
+          {
+            "pipelineReference": {
+              "referenceName": "copyfilesharepipeline",
+              "type": "PipelineReference"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/triggers",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/copydatalakegen2trigger')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/copydatalakegen2pipeline')]"
+      ],
+      "properties": {
+        "type": "ScheduleTrigger",
+        "typeProperties": {
+          "recurrence": {
+            "frequency": "Minute",
+            "interval": 5,
+            "startTime": "2026-03-02T12:00:00Z"
+          }
+        },
+        "pipelines": [
+          {
+            "pipelineReference": {
+              "referenceName": "copydatalakegen2pipeline",
+              "type": "PipelineReference"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

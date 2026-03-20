@@ -38,6 +38,16 @@ variable "dest_storage_account" {
   type        = string
 }
 
+variable "source_fileshare_storage_resource_id" {
+  description = "Resource ID of the source file share storage account"
+  type        = string
+}
+
+variable "dest_fileshare_storage_resource_id" {
+  description = "Resource ID of the destination file share storage account"
+  type        = string
+}
+
 variable "source_datalake_storage_account" {
   description = "Source Data Lake Gen2 Storage Account name (East US 2)"
   type        = string

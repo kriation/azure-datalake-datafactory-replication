@@ -13,6 +13,8 @@ resource "azurerm_resource_group_template_deployment" "pipeline" {
     keyVaultBaseUrl = { value = var.key_vault_uri },
     sourceFileshareConnectionSecretName = { value = var.source_fileshare_connection_secret_name },
     destFileshareConnectionSecretName   = { value = var.dest_fileshare_connection_secret_name },
+    sourceFileshareStorageResourceId    = { value = var.source_fileshare_storage_resource_id },
+    destFileshareStorageResourceId      = { value = var.dest_fileshare_storage_resource_id },
     sourceDatalakeAccountName = { value = var.source_datalake_storage_account },
     destDatalakeAccountName   = { value = var.dest_datalake_storage_account },
     sourceDatalakeFilesystem  = { value = var.source_datalake_filesystem_name },

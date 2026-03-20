@@ -254,6 +254,21 @@ module "data_factory" {
   providers = {
     azurerm = azurerm.canadaeast
   }
+
+  depends_on = [
+    azurerm_data_factory_customer_managed_key.canadaeast_data_factory_cmk_binding,
+  ]
+}
+
+resource "azurerm_data_factory_customer_managed_key" "canadaeast_data_factory_cmk_binding" {
+  data_factory_id         = module.data_factory_identity.id
+  customer_managed_key_id = module.canadaeast_encryption_keys.key_ids[var.canadaeast_data_factory_cmk_name]
+
+  depends_on = [
+    module.data_factory_identity,
+    module.canadaeast_encryption_keys,
+    time_sleep.canadaeast_key_vault_rbac_propagation,
+  ]
 }
 
 # Data Lake Gen2 Storage Accounts and Filesystems

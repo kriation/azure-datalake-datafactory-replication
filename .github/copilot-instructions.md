@@ -22,6 +22,7 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 	- Phase 2: Regional Key Vaults with private endpoints and deny-by-default network ACLs
 	- Phase 3: Regional CMK creation and Key Vault RBAC for the deploying principal and Data Factory identity
 	- Phase 4: Storage accounts with CMK binding, TLS1_2 policy validation, and disabled public network access
+	- Phase 5: Data Factory CMK enablement
 - All Data Factory objects (linked services, datasets, pipelines, triggers) are managed via a parameterized ARM template for full repeatability and UI compatibility. **Resource ordering and case-sensitive naming are critical for successful deployment.**
 - Scripts in the `scripts/` directory support demo data population and trigger management.
 - Terraform uses a single local state, but build-time validation uses staged `-target` applies in dependency order. Steady-state usage remains full `terraform plan` and `terraform apply`.
@@ -57,6 +58,7 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 	 - Phase 2: `terraform apply -target=module.eastus2_key_vault -target=module.canadaeast_key_vault -var-file=demo.tfvars`
 	 - Phase 3: `terraform apply -target=module.data_factory_identity -target=module.eastus2_encryption_keys -target=module.canadaeast_encryption_keys -var-file=demo.tfvars`
 	 - Phase 4: `terraform apply -target=module.eastus2_storage -target=module.canadaeast_storage -target=module.eastus2_datalake -target=module.canadaeast_datalake -target=azurerm_storage_account_customer_managed_key.eastus2_storage_cmk_binding -target=azurerm_storage_account_customer_managed_key.eastus2_datalake_cmk_binding -target=azurerm_storage_account_customer_managed_key.canadaeast_storage_cmk_binding -target=azurerm_storage_account_customer_managed_key.canadaeast_datalake_cmk_binding -var-file=demo.tfvars`
+	 - Phase 5: `terraform apply -target=azurerm_data_factory_customer_managed_key.canadaeast_data_factory_cmk_binding -var-file=demo.tfvars`
 4. Prefer the self-contained phase gate scripts for validation:
 	 - `scripts/test-phase1-network.sh`
 	 - `scripts/test-phase2-keyvault.sh`
@@ -81,6 +83,8 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 - Phase 4 relies on Key Vault trusted service bypass (`AzureServices`) so storage accounts can perform CMK operations while Key Vault public network access remains disabled.
 - Because Phase 4 requires purge-protected Key Vaults for storage CMK binding, phase test scripts no longer attempt to destroy Key Vaults once Phase 2 has been applied.
 - Scripts are provided for demo data, trigger management, and per-phase validation
+- Data Factory CMK enablement is modeled with `azurerm_data_factory_customer_managed_key`; once applied, Azure requires Data Factory recreation to remove the CMK binding.
+- Azure also rejects adding a CMK to an existing Data Factory that already has entities deployed, so existing environments require a one-time Data Factory recreation; the Terraform graph should bind the CMK before the ARM template deploys ADF entities in fresh environments.
 
 ## Integration Points
 - Azure CLI authentication required
@@ -90,8 +94,8 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 
 ## Next Steps
 - Update this file if you add new modules, workflows, or architectural changes
-- Planned remaining phases after Phase 4:
-	- Phase 5: Data Factory CMK enablement
+
+- Planned remaining phases after Phase 5:
 	- Phase 6: Key Vault-backed linked service secret references
 	- Phase 7: Operational script updates to use Key Vault-hosted secrets
 	- Phase 8: Full-stack convergence and replication smoke tests

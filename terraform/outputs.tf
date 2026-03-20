@@ -87,7 +87,7 @@ output "canadaeast_datalake_cmk_key_id" {
 }
 
 output "canadaeast_data_factory_cmk_key_id" {
-  value = module.canadaeast_encryption_keys.versionless_key_ids[var.canadaeast_data_factory_cmk_name]
+  value = module.canadaeast_encryption_keys.key_ids[var.canadaeast_data_factory_cmk_name]
 }
 
 output "eastus2_storage_public_network_access_enabled" {
@@ -136,6 +136,10 @@ output "canadaeast_storage_cmk_binding_id" {
 
 output "canadaeast_datalake_cmk_binding_id" {
   value = azurerm_storage_account_customer_managed_key.canadaeast_datalake_cmk_binding.id
+}
+
+output "canadaeast_data_factory_cmk_binding_id" {
+  value = azurerm_data_factory_customer_managed_key.canadaeast_data_factory_cmk_binding.id
 }
 
 output "eastus2_storage_name" {

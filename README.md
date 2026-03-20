@@ -85,6 +85,17 @@ Validate Phase 4 before continuing:
     - Minimum TLS version is `TLS1_2` for all storage accounts
     - Public network access is disabled for all storage accounts
 
+Before continuing with Key Vault-backed linked service secret references, run the Phase 5 gate:
+
+    terraform apply -target=azurerm_data_factory_customer_managed_key.canadaeast_data_factory_cmk_binding -var-file=demo.tfvars
+
+Validate Phase 5 before continuing:
+    - Data Factory is bound to the Canada East CMK (`canadaeast_data_factory_cmk_key_id`)
+    - The Data Factory CMK binding resource exists in state/output (`canadaeast_data_factory_cmk_binding_id`)
+    - The Canada East Data Factory identity retains Key Vault Crypto Service Encryption User RBAC on the Canada East vault
+    - Note: Data Factory CMK binding is effectively permanent; removing it requires recreating the factory
+    - Existing factories that already contain linked services, datasets, pipelines, or triggers must be recreated once before this phase can succeed; Azure rejects adding CMK to a populated factory
+
 **Step 6: (Optional) Populate Demo Data**
 
     ../scripts/populate-source-fileshare.sh
@@ -193,6 +204,8 @@ The phased Terraform apply sequence (Steps 4-5) follows the same dependency mode
 - The Phase 3 gate script (`test-phase3-cmk.sh`) destroys CMKs, their Key Vault RBAC assignments, and the Data Factory identity by default; `--cleanup-all` does not remove Key Vaults or lower-phase prerequisites.
 - The Phase 3 gate script (`test-phase3-cmk.sh`) temporarily allows the caller's current public IP to reach the Key Vault data plane so local Terraform can create CMKs, then restores both vaults to `publicNetworkAccess = Disabled` before completion.
 - The Phase 4 gate script (`test-phase4-storage-cmk-tls.sh`) destroys storage CMK bindings, storage Key Vault RBAC assignments, and storage modules by default; `--cleanup-all` additionally removes Phase 3 CMKs and related RBAC, but retains Key Vaults and lower-phase prerequisites.
+- Phase 5 uses `azurerm_data_factory_customer_managed_key` to bind the Canada East Data Factory to a Canada East Key Vault key; Azure does not support removing this binding in place, so rollback requires recreating the Data Factory.
+- For fresh environments, the Terraform graph now binds the Data Factory CMK before deploying ARM-managed ADF entities. For existing environments that already deployed ADF entities without CMK, perform a one-time Data Factory recreation before applying Phase 5.
 - Storage CMK operations rely on trusted Azure service access to Key Vault (`key_vault_bypass = "AzureServices"` in `demo.tfvars`).
 - From Phase 4 onward, `key_vault_purge_protection_enabled = true` is required for storage CMK binding, which makes Key Vault teardown a non-goal for the phase test scripts.
 - After Phase 4 lockdown is restored, a plain `terraform plan -var-file=demo.tfvars` from a public workstation can fail while refreshing Key Vault keys and Data Lake filesystems. Those are data-plane resources and require either private-network reachability or a temporary bootstrap exception.

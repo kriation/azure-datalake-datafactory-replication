@@ -184,6 +184,12 @@ resource "azurerm_role_assignment" "canadaeast_data_factory_key_vault_crypto_use
   principal_id         = module.data_factory_identity.principal_id
 }
 
+resource "azurerm_role_assignment" "canadaeast_data_factory_key_vault_secrets_user" {
+  scope                = module.canadaeast_key_vault.id
+  role_definition_name = var.key_vault_secrets_user_role_definition_name
+  principal_id         = module.data_factory_identity.principal_id
+}
+
 resource "time_sleep" "eastus2_key_vault_rbac_propagation" {
   create_duration = var.key_vault_role_assignment_propagation_wait
 
@@ -198,6 +204,27 @@ resource "time_sleep" "canadaeast_key_vault_rbac_propagation" {
   depends_on = [
     azurerm_role_assignment.canadaeast_key_vault_admin_current,
     azurerm_role_assignment.canadaeast_data_factory_key_vault_crypto_user,
+    azurerm_role_assignment.canadaeast_data_factory_key_vault_secrets_user,
+  ]
+}
+
+resource "azurerm_key_vault_secret" "adf_source_fileshare_connection_string" {
+  name         = var.data_factory_source_fileshare_connection_secret_name
+  value        = module.eastus2_storage.primary_connection_string
+  key_vault_id = module.canadaeast_key_vault.id
+
+  depends_on = [
+    time_sleep.canadaeast_key_vault_rbac_propagation,
+  ]
+}
+
+resource "azurerm_key_vault_secret" "adf_dest_fileshare_connection_string" {
+  name         = var.data_factory_dest_fileshare_connection_secret_name
+  value        = module.canadaeast_storage.primary_connection_string
+  key_vault_id = module.canadaeast_key_vault.id
+
+  depends_on = [
+    time_sleep.canadaeast_key_vault_rbac_propagation,
   ]
 }
 
@@ -244,8 +271,9 @@ module "data_factory" {
   data_factory_principal_id = module.data_factory_identity.principal_id
   source_storage_account = module.eastus2_storage.name
   dest_storage_account   = module.canadaeast_storage.name
-  source_storage_connection_string = module.eastus2_storage.primary_connection_string
-  dest_storage_connection_string   = module.canadaeast_storage.primary_connection_string
+  key_vault_uri = module.canadaeast_key_vault.vault_uri
+  source_fileshare_connection_secret_name = azurerm_key_vault_secret.adf_source_fileshare_connection_string.name
+  dest_fileshare_connection_secret_name   = azurerm_key_vault_secret.adf_dest_fileshare_connection_string.name
   source_datalake_storage_account = module.eastus2_datalake.storage_account_name
   dest_datalake_storage_account   = module.canadaeast_datalake.storage_account_name
   resource_group_name = module.canadaeast_rg.name
@@ -257,6 +285,8 @@ module "data_factory" {
 
   depends_on = [
     azurerm_data_factory_customer_managed_key.canadaeast_data_factory_cmk_binding,
+    azurerm_key_vault_secret.adf_source_fileshare_connection_string,
+    azurerm_key_vault_secret.adf_dest_fileshare_connection_string,
   ]
 }
 

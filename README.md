@@ -96,6 +96,16 @@ Validate Phase 5 before continuing:
     - Note: Data Factory CMK binding is effectively permanent; removing it requires recreating the factory
     - Existing factories that already contain linked services, datasets, pipelines, or triggers must be recreated once before this phase can succeed; Azure rejects adding CMK to a populated factory
 
+Before continuing with operational script secret consumption, run the Phase 6 gate:
+
+    terraform apply -target=azurerm_key_vault_secret.adf_source_fileshare_connection_string -target=azurerm_key_vault_secret.adf_dest_fileshare_connection_string -target=module.data_factory -var-file=demo.tfvars
+
+Validate Phase 6 before continuing:
+    - ADF linked service `adf-keyvault` exists and points to the Canada East Key Vault URI
+    - ADF file share linked services reference Key Vault secrets (not inline connection strings)
+    - Key Vault secrets exist for source and destination file share connection strings
+    - The Data Factory identity has Key Vault Secrets User RBAC on the Canada East vault
+
 **Step 6: (Optional) Populate Demo Data**
 
     ../scripts/populate-source-fileshare.sh
@@ -206,6 +216,7 @@ The phased Terraform apply sequence (Steps 4-5) follows the same dependency mode
 - The Phase 4 gate script (`test-phase4-storage-cmk-tls.sh`) destroys storage CMK bindings, storage Key Vault RBAC assignments, and storage modules by default; `--cleanup-all` additionally removes Phase 3 CMKs and related RBAC, but retains Key Vaults and lower-phase prerequisites.
 - Phase 5 uses `azurerm_data_factory_customer_managed_key` to bind the Canada East Data Factory to a Canada East Key Vault key; Azure does not support removing this binding in place, so rollback requires recreating the Data Factory.
 - For fresh environments, the Terraform graph now binds the Data Factory CMK before deploying ARM-managed ADF entities. For existing environments that already deployed ADF entities without CMK, perform a one-time Data Factory recreation before applying Phase 5.
+- Phase 6 stores file share connection strings in Canada East Key Vault secrets and updates ADF linked services to resolve those secrets through an ADF Key Vault linked service.
 - Storage CMK operations rely on trusted Azure service access to Key Vault (`key_vault_bypass = "AzureServices"` in `demo.tfvars`).
 - From Phase 4 onward, `key_vault_purge_protection_enabled = true` is required for storage CMK binding, which makes Key Vault teardown a non-goal for the phase test scripts.
 - After Phase 4 lockdown is restored, a plain `terraform plan -var-file=demo.tfvars` from a public workstation can fail while refreshing Key Vault keys and Data Lake filesystems. Those are data-plane resources and require either private-network reachability or a temporary bootstrap exception.

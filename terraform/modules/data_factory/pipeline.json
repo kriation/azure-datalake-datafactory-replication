@@ -3,8 +3,9 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "factoryName": { "type": "String" },
-    "sourceConnectionString": { "type": "String" },
-    "destConnectionString": { "type": "String" }
+    "keyVaultBaseUrl": { "type": "String" },
+    "sourceFileshareConnectionSecretName": { "type": "String" },
+    "destFileshareConnectionSecretName": { "type": "String" }
     ,
     "sourceDatalakeAccountName": { "type": "String" },
     "destDatalakeAccountName": { "type": "String" },
@@ -12,11 +13,12 @@
     "destDatalakeFilesystem": { "type": "String" }
   },
   "resources": [
+    { "type": "Microsoft.DataFactory/factories/linkedservices", "apiVersion": "2018-06-01", "name": "[concat(parameters('factoryName'), '/adf-keyvault')]", "properties": { "type": "AzureKeyVault", "typeProperties": { "baseUrl": "[parameters('keyVaultBaseUrl')]" } } },
     
-    { "type": "Microsoft.DataFactory/factories/linkedservices", "apiVersion": "2018-06-01", "name": "[concat(parameters('factoryName'), '/source-fileshare')]", "properties": { "type": "AzureFileStorage", "typeProperties": { "connectionString": "[parameters('sourceConnectionString')]", "fileShare": "fileshare" } } },
+    { "type": "Microsoft.DataFactory/factories/linkedservices", "apiVersion": "2018-06-01", "name": "[concat(parameters('factoryName'), '/source-fileshare')]", "dependsOn": ["[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/adf-keyvault')]"], "properties": { "type": "AzureFileStorage", "typeProperties": { "connectionString": { "type": "AzureKeyVaultSecret", "store": { "referenceName": "adf-keyvault", "type": "LinkedServiceReference" }, "secretName": "[parameters('sourceFileshareConnectionSecretName')]" }, "fileShare": "fileshare" } } },
     { "type": "Microsoft.DataFactory/factories/linkedservices", "apiVersion": "2018-06-01", "name": "[concat(parameters('factoryName'), '/source-datalake')]", "properties": { "type": "AzureBlobFS", "typeProperties": { "url": "[concat('https://', parameters('sourceDatalakeAccountName'), '.dfs.core.windows.net')]" } } },
     { "type": "Microsoft.DataFactory/factories/linkedservices", "apiVersion": "2018-06-01", "name": "[concat(parameters('factoryName'), '/dest-datalake')]", "properties": { "type": "AzureBlobFS", "typeProperties": { "url": "[concat('https://', parameters('destDatalakeAccountName'), '.dfs.core.windows.net')]" } } },
-    { "type": "Microsoft.DataFactory/factories/linkedservices", "apiVersion": "2018-06-01", "name": "[concat(parameters('factoryName'), '/dest-fileshare')]", "properties": { "type": "AzureFileStorage", "typeProperties": { "connectionString": "[parameters('destConnectionString')]", "fileShare": "fileshare" } } },
+    { "type": "Microsoft.DataFactory/factories/linkedservices", "apiVersion": "2018-06-01", "name": "[concat(parameters('factoryName'), '/dest-fileshare')]", "dependsOn": ["[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/adf-keyvault')]"], "properties": { "type": "AzureFileStorage", "typeProperties": { "connectionString": { "type": "AzureKeyVaultSecret", "store": { "referenceName": "adf-keyvault", "type": "LinkedServiceReference" }, "secretName": "[parameters('destFileshareConnectionSecretName')]" }, "fileShare": "fileshare" } } },
 
     
     { "type": "Microsoft.DataFactory/factories/datasets", "apiVersion": "2018-06-01", "name": "[concat(parameters('factoryName'), '/source-fileshare')]", "dependsOn": ["[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/source-fileshare')]"], "properties": { "linkedServiceName": { "referenceName": "source-fileshare", "type": "LinkedServiceReference" }, "type": "AzureFile", "typeProperties": { "folderPath": "/" } } },

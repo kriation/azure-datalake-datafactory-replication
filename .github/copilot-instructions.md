@@ -23,6 +23,7 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 	- Phase 3: Regional CMK creation and Key Vault RBAC for the deploying principal and Data Factory identity
 	- Phase 4: Storage accounts with CMK binding, TLS1_2 policy validation, and disabled public network access
 	- Phase 5: Data Factory CMK enablement
+	- Phase 6: Key Vault-backed linked service secret references
 - All Data Factory objects (linked services, datasets, pipelines, triggers) are managed via a parameterized ARM template for full repeatability and UI compatibility. **Resource ordering and case-sensitive naming are critical for successful deployment.**
 - Scripts in the `scripts/` directory support demo data population and trigger management.
 - Terraform uses a single local state, but build-time validation uses staged `-target` applies in dependency order. Steady-state usage remains full `terraform plan` and `terraform apply`.
@@ -59,6 +60,7 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 	 - Phase 3: `terraform apply -target=module.data_factory_identity -target=module.eastus2_encryption_keys -target=module.canadaeast_encryption_keys -var-file=demo.tfvars`
 	 - Phase 4: `terraform apply -target=module.eastus2_storage -target=module.canadaeast_storage -target=module.eastus2_datalake -target=module.canadaeast_datalake -target=azurerm_storage_account_customer_managed_key.eastus2_storage_cmk_binding -target=azurerm_storage_account_customer_managed_key.eastus2_datalake_cmk_binding -target=azurerm_storage_account_customer_managed_key.canadaeast_storage_cmk_binding -target=azurerm_storage_account_customer_managed_key.canadaeast_datalake_cmk_binding -var-file=demo.tfvars`
 	 - Phase 5: `terraform apply -target=azurerm_data_factory_customer_managed_key.canadaeast_data_factory_cmk_binding -var-file=demo.tfvars`
+	 - Phase 6: `terraform apply -target=azurerm_key_vault_secret.adf_source_fileshare_connection_string -target=azurerm_key_vault_secret.adf_dest_fileshare_connection_string -target=module.data_factory -var-file=demo.tfvars`
 4. Prefer the self-contained phase gate scripts for validation:
 	 - `scripts/test-phase1-network.sh`
 	 - `scripts/test-phase2-keyvault.sh`
@@ -95,8 +97,8 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 ## Next Steps
 - Update this file if you add new modules, workflows, or architectural changes
 
-- Planned remaining phases after Phase 5:
-	- Phase 6: Key Vault-backed linked service secret references
+
+- Planned remaining phases after Phase 6:
 	- Phase 7: Operational script updates to use Key Vault-hosted secrets
 	- Phase 8: Full-stack convergence and replication smoke tests
 - If you encounter ARM template errors, check for case-sensitive name mismatches and resource ordering in pipeline.json.

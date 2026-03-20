@@ -216,6 +216,12 @@ variable "key_vault_crypto_user_role_definition_name" {
   default     = "Key Vault Crypto Service Encryption User"
 }
 
+variable "key_vault_secrets_user_role_definition_name" {
+  description = "Role granted to service identities that need Key Vault secret read access."
+  type        = string
+  default     = "Key Vault Secrets User"
+}
+
 variable "key_vault_role_assignment_propagation_wait" {
   description = "Wait duration after Key Vault RBAC assignments before creating data-plane CMKs."
   type        = string
@@ -238,4 +244,16 @@ variable "create_datalake_filesystems" {
   description = "Whether Data Lake filesystem resources should be created."
   type        = bool
   default     = true
+}
+
+variable "data_factory_source_fileshare_connection_secret_name" {
+  description = "Secret name in the Canada East Key Vault for the source file share connection string."
+  type        = string
+  default     = "adf-source-fileshare-connection-string"
+}
+
+variable "data_factory_dest_fileshare_connection_secret_name" {
+  description = "Secret name in the Canada East Key Vault for the destination file share connection string."
+  type        = string
+  default     = "adf-dest-fileshare-connection-string"
 }

@@ -12,13 +12,19 @@ variable "resource_group_name" {
   description = "Resource Group name for Data Factory deployment"
   type        = string
 }
-variable "source_storage_connection_string" {
-  description = "Primary connection string for source storage account"
+
+variable "key_vault_uri" {
+  description = "Vault URI used by the Data Factory Key Vault linked service"
   type        = string
 }
 
-variable "dest_storage_connection_string" {
-  description = "Primary connection string for destination storage account"
+variable "source_fileshare_connection_secret_name" {
+  description = "Secret name for source file share connection string"
+  type        = string
+}
+
+variable "dest_fileshare_connection_secret_name" {
+  description = "Secret name for destination file share connection string"
   type        = string
 }
 

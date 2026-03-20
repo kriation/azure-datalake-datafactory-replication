@@ -142,6 +142,14 @@ output "canadaeast_data_factory_cmk_binding_id" {
   value = azurerm_data_factory_customer_managed_key.canadaeast_data_factory_cmk_binding.id
 }
 
+output "adf_source_fileshare_connection_secret_name" {
+  value = azurerm_key_vault_secret.adf_source_fileshare_connection_string.name
+}
+
+output "adf_dest_fileshare_connection_secret_name" {
+  value = azurerm_key_vault_secret.adf_dest_fileshare_connection_string.name
+}
+
 output "eastus2_storage_name" {
   value = module.eastus2_storage.name
 }

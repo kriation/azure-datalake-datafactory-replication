@@ -49,29 +49,30 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 - `scripts/test-phase2-keyvault.sh`: Self-contained Phase 2 integration test with clearer timeout signaling for Key Vault destroy
 - `scripts/test-phase3-cmk.sh`: Self-contained Phase 3 integration test for CMK creation and RBAC validation
 - `scripts/test-phase4-storage-cmk-tls.sh`: Self-contained Phase 4 integration test for storage CMK bindings and TLS/public-access validation
+- `scripts/execute-phase5-6.sh`: Self-contained Phase 5/6 orchestration (ADF CMK, KV secrets, ARM deployment, and artifact validation/remediation)
 - `scripts/populate-source-fileshare.sh`: Populates the source file share with random files for demo/testing
 - `scripts/validate-adf-health.sh`: Minimal ADF replication health gate for trigger state and recent pipeline outcomes
 - `scripts/toggle-trigger.sh`: CLI tool to start/stop the Data Factory pipeline trigger
+- `scripts/reset-to-keyvault-baseline.sh`: Repeatable teardown to keep only demo resource groups and empty Key Vaults
 
 ## Developer Workflow
 1. Authenticate with Azure CLI (`az login`)
 2. Edit only `terraform/demo.tfvars` to supply your Azure subscription, tenant, and resource names
-3. Use phased gates while building or validating new hardening layers:
-	 - Phase 1: `terraform apply -target=module.eastus2_rg -target=module.canadaeast_rg -var-file=demo.tfvars`, then `terraform apply -target=module.eastus2_network -target=module.canadaeast_network -var-file=demo.tfvars`
-	 - Phase 2: `terraform apply -target=module.eastus2_key_vault -target=module.canadaeast_key_vault -var-file=demo.tfvars`
-	 - Phase 3: `terraform apply -target=module.data_factory_identity -target=module.eastus2_encryption_keys -target=module.canadaeast_encryption_keys -var-file=demo.tfvars`
-	 - Phase 4: `terraform apply -target=module.eastus2_storage -target=module.canadaeast_storage -target=module.eastus2_datalake -target=module.canadaeast_datalake -target=azurerm_storage_account_customer_managed_key.eastus2_storage_cmk_binding -target=azurerm_storage_account_customer_managed_key.eastus2_datalake_cmk_binding -target=azurerm_storage_account_customer_managed_key.canadaeast_storage_cmk_binding -target=azurerm_storage_account_customer_managed_key.canadaeast_datalake_cmk_binding -var-file=demo.tfvars`
-	 - Phase 5: `terraform apply -target=azurerm_data_factory_customer_managed_key.canadaeast_data_factory_cmk_binding -var-file=demo.tfvars`
-	 - Phase 6: `terraform apply -target=azurerm_key_vault_secret.adf_source_fileshare_connection_string -target=azurerm_key_vault_secret.adf_dest_fileshare_connection_string -target=module.data_factory -var-file=demo.tfvars`
-4. Prefer the self-contained phase gate scripts for validation:
+3. Preferred script-first deployment flow for a complete demo environment:
+	 - `scripts/test-phase4-storage-cmk-tls.sh --keep`
+	 - `scripts/execute-phase5-6.sh`
+	 - `scripts/validate-adf-health.sh`
+4. Use phased Terraform `-target` applies only for advanced/manual recovery or development of a specific hardening phase.
+5. Prefer the self-contained phase gate scripts for validation:
 	 - `scripts/test-phase1-network.sh`
 	 - `scripts/test-phase2-keyvault.sh`
 	 - `scripts/test-phase3-cmk.sh`
 	 - `scripts/test-phase4-storage-cmk-tls.sh`
-5. After phased validation, use full `terraform plan -var-file=demo.tfvars` and `terraform apply -var-file=demo.tfvars` only from an environment that can reach the private data plane. From a public workstation after Phase 4 lockdown, use `terraform plan -refresh=false -var-file=demo.tfvars` for convergence checks and the phase gate scripts for refreshed validation.
-6. (Optional) Run `scripts/populate-source-fileshare.sh` or `scripts/populate-source-datalake.sh` to add demo data
-7. (Optional) Use `scripts/toggle-trigger.sh start|stop` or `scripts/toggle-datalake-trigger.sh start|stop` to control the scheduled pipelines
-8. (Recommended) Validate replication health with `scripts/validate-adf-health.sh` (or scope with `--pipelines copydatalakegen2pipeline` while fileshare private connectivity hardening is in progress)
+6. After phased validation, use full `terraform plan -var-file=demo.tfvars` and `terraform apply -var-file=demo.tfvars` only from an environment that can reach the private data plane. From a public workstation after Phase 4 lockdown, use `terraform plan -refresh=false -var-file=demo.tfvars` for convergence checks and the phase gate scripts for refreshed validation.
+7. (Optional) Run `scripts/populate-source-fileshare.sh` or `scripts/populate-source-datalake.sh` to add demo data
+8. (Optional) Use `scripts/toggle-trigger.sh start|stop` or `scripts/toggle-datalake-trigger.sh start|stop` to control the scheduled pipelines
+9. (Recommended) Validate replication health with `scripts/validate-adf-health.sh` (or scope with `--pipelines copydatalakegen2pipeline` while fileshare private connectivity hardening is in progress)
+10. (Reset for next test cycle) Run `scripts/reset-to-keyvault-baseline.sh` to keep only the two RGs and empty Key Vaults.
 
 ## Conventions & Patterns
 - All cross-module secrets (storage connection strings) are passed via module outputs and variables—no manual secret editing required
@@ -88,6 +89,9 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 - Because Phase 4 requires purge-protected Key Vaults for storage CMK binding, phase test scripts no longer attempt to destroy Key Vaults once Phase 2 has been applied.
 - Scripts are provided for demo data, trigger management, and per-phase validation
 - File-share operational scripts now resolve connection strings from Key Vault-hosted secrets and restore network lockdown automatically after temporary bootstrap access.
+- `scripts/execute-phase5-6.sh` includes ADF artifact assurance: if pipelines/triggers are missing after apply, it forces ARM deployment and re-validates.
+- `scripts/validate-adf-health.sh` supports trigger name variants (lowercase template names and legacy cased names).
+- `scripts/reset-to-keyvault-baseline.sh` requires sufficient RBAC (`Owner` or `Contributor` on both RGs and `Key Vault Administrator` on both vaults) to avoid partial teardown failures.
 - Data Factory CMK enablement is modeled with `azurerm_data_factory_customer_managed_key`; once applied, Azure requires Data Factory recreation to remove the CMK binding.
 - Azure also rejects adding a CMK to an existing Data Factory that already has entities deployed, so existing environments require a one-time Data Factory recreation; the Terraform graph should bind the CMK before the ARM template deploys ADF entities in fresh environments.
 

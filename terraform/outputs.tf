@@ -71,23 +71,23 @@ output "key_vault_crypto_user_role_definition_name" {
 }
 
 output "eastus2_storage_cmk_key_id" {
-  value = module.eastus2_encryption_keys.versionless_key_ids[var.eastus2_storage_cmk_name]
+  value = try(module.eastus2_encryption_keys.versionless_key_ids[var.eastus2_storage_cmk_name], null)
 }
 
 output "eastus2_datalake_cmk_key_id" {
-  value = module.eastus2_encryption_keys.versionless_key_ids[var.eastus2_datalake_cmk_name]
+  value = try(module.eastus2_encryption_keys.versionless_key_ids[var.eastus2_datalake_cmk_name], null)
 }
 
 output "canadaeast_storage_cmk_key_id" {
-  value = module.canadaeast_encryption_keys.versionless_key_ids[var.canadaeast_storage_cmk_name]
+  value = try(module.canadaeast_encryption_keys.versionless_key_ids[var.canadaeast_storage_cmk_name], null)
 }
 
 output "canadaeast_datalake_cmk_key_id" {
-  value = module.canadaeast_encryption_keys.versionless_key_ids[var.canadaeast_datalake_cmk_name]
+  value = try(module.canadaeast_encryption_keys.versionless_key_ids[var.canadaeast_datalake_cmk_name], null)
 }
 
 output "canadaeast_data_factory_cmk_key_id" {
-  value = module.canadaeast_encryption_keys.key_ids[var.canadaeast_data_factory_cmk_name]
+  value = try(module.canadaeast_encryption_keys.key_ids[var.canadaeast_data_factory_cmk_name], null)
 }
 
 output "eastus2_storage_public_network_access_enabled" {

@@ -538,6 +538,7 @@ restore_storage_lockdown() {
 destroy_phase4() {
   echo "[INFO] Destroying Phase 4 storage CMK bindings..."
   tf destroy \
+    -refresh=false \
     -target=azurerm_storage_account_customer_managed_key.eastus2_storage_cmk_binding \
     -target=azurerm_storage_account_customer_managed_key.eastus2_datalake_cmk_binding \
     -target=azurerm_storage_account_customer_managed_key.canadaeast_storage_cmk_binding \
@@ -547,6 +548,7 @@ destroy_phase4() {
 
   echo "[INFO] Destroying Phase 4 storage Key Vault RBAC and propagation wait resources..."
   tf destroy \
+    -refresh=false \
     -target=time_sleep.storage_key_vault_rbac_propagation \
     -target=azurerm_role_assignment.eastus2_storage_key_vault_crypto_user \
     -target=azurerm_role_assignment.eastus2_datalake_key_vault_crypto_user \
@@ -557,6 +559,7 @@ destroy_phase4() {
 
   echo "[INFO] Destroying Phase 4 storage account modules..."
   tf destroy \
+    -refresh=false \
     -target=module.eastus2_storage \
     -target=module.canadaeast_storage \
     -target=module.eastus2_datalake \

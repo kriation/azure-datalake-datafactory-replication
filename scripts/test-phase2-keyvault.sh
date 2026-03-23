@@ -25,7 +25,6 @@ Options:
 
 Examples:
   ./scripts/test-phase2-keyvault.sh
-  ./scripts/test-phase2-keyvault.sh --keep
   ./scripts/test-phase2-keyvault.sh --cleanup-phase
   ./scripts/test-phase2-keyvault.sh --cleanup-all
 EOF

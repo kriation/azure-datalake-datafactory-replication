@@ -12,7 +12,7 @@
 #
 # Usage:
 #   ./approve-managed-private-endpoints.sh
-#   ./approve-managed-private-endpoints.sh -g rg-demo-eastus2 -a stdemoeastus2 -r2 rg-demo-canadaeast -s2 stdemocanadaeast
+#   ./approve-managed-private-endpoints.sh -g rg-demo-eastus2 -a stdemoeastus2 -r rg-demo-canadaeast -s stdemocanadaeast
 
 set -euo pipefail
 
@@ -24,11 +24,11 @@ DEST_STORAGE="stdemocanadaeast"
 
 # Usage info
 usage() {
-  echo "Usage: $0 [-g SOURCE_RG] [-a SOURCE_STORAGE] [-r2 DEST_RG] [-s2 DEST_STORAGE]"
+  echo "Usage: $0 [-g SOURCE_RG] [-a SOURCE_STORAGE] [-r DEST_RG] [-s DEST_STORAGE]"
   echo "  -g SOURCE_RG           Source resource group (default: rg-demo-eastus2)"
   echo "  -a SOURCE_STORAGE      Source storage account (default: stdemoeastus2)"
-  echo "  -r2 DEST_RG            Destination resource group (default: rg-demo-canadaeast)"
-  echo "  -s2 DEST_STORAGE       Destination storage account (default: stdemocanadaeast)"
+  echo "  -r DEST_RG             Destination resource group (default: rg-demo-canadaeast)"
+  echo "  -s DEST_STORAGE        Destination storage account (default: stdemocanadaeast)"
   exit 1
 }
 

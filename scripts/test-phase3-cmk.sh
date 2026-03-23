@@ -109,6 +109,126 @@ tf() {
   terraform -chdir="$TF_DIR" "$@"
 }
 
+tf_state_has_address() {
+  local address="$1"
+  tf state list 2>/dev/null | grep -Fx "$address" >/dev/null 2>&1
+}
+
+import_if_exists() {
+  local address="$1"
+  local resource_id="$2"
+
+  if [[ -z "$resource_id" || "$resource_id" == "null" ]]; then
+    return
+  fi
+
+  if tf_state_has_address "$address"; then
+    return
+  fi
+
+  echo "[INFO] Importing existing resource into state: $address"
+  tf import -var-file="$TFVARS_FILE" "$address" "$resource_id" >/dev/null
+}
+
+current_principal_object_id() {
+  local oid=""
+
+  oid="$(az ad signed-in-user show --query id -o tsv 2>/dev/null || true)"
+  if [[ -n "$oid" && "$oid" != "null" ]]; then
+    echo "$oid"
+    return
+  fi
+
+  local account_user
+  account_user="$(az account show --query user.name -o tsv 2>/dev/null || true)"
+  if [[ -n "$account_user" ]]; then
+    oid="$(az ad sp show --id "$account_user" --query id -o tsv 2>/dev/null || true)"
+    if [[ -n "$oid" && "$oid" != "null" ]]; then
+      echo "$oid"
+      return
+    fi
+  fi
+
+  oid="$(tf output -raw current_operator_object_id 2>/dev/null || true)"
+  echo "$oid"
+}
+
+existing_role_assignment_id() {
+  local scope="$1"
+  local principal_id="$2"
+  local role_name="$3"
+
+  az role assignment list \
+    --scope "$scope" \
+    --assignee-object-id "$principal_id" \
+    --query "[?roleDefinitionName=='${role_name}'] | [0].id" \
+    -o tsv 2>/dev/null || true
+}
+
+phase3_reconcile_existing_resources() {
+  echo "[INFO] Reconciling existing Phase 3 resources into Terraform state (idempotent imports)..."
+
+  local subscription_id east_rg canada_rg east_kv canada_kv data_factory_name
+  local east_scope canada_scope principal_id data_factory_id data_factory_principal_id
+  local cmk_st_east cmk_dl_east cmk_st_canada cmk_dl_canada cmk_adf_canada
+  local id
+
+  subscription_id="$(az account show --query id -o tsv)"
+  east_rg="$(tf output -raw eastus2_rg_name 2>/dev/null || tfvar_string eastus2_rg_name)"
+  canada_rg="$(tf output -raw canadaeast_rg_name 2>/dev/null || tfvar_string canadaeast_rg_name)"
+  east_kv="$(tf output -raw eastus2_key_vault_name 2>/dev/null || tfvar_string eastus2_key_vault_name)"
+  canada_kv="$(tf output -raw canadaeast_key_vault_name 2>/dev/null || tfvar_string canadaeast_key_vault_name)"
+  data_factory_name="$(tf output -raw data_factory_name 2>/dev/null || tfvar_string data_factory_name)"
+
+  east_scope="/subscriptions/${subscription_id}/resourceGroups/${east_rg}/providers/Microsoft.KeyVault/vaults/${east_kv}"
+  canada_scope="/subscriptions/${subscription_id}/resourceGroups/${canada_rg}/providers/Microsoft.KeyVault/vaults/${canada_kv}"
+  principal_id="$(current_principal_object_id)"
+
+  # Existing Data Factory identity (if present from prior partial run)
+  data_factory_id="$(az datafactory show --resource-group "$canada_rg" --name "$data_factory_name" --query id -o tsv 2>/dev/null || true)"
+  import_if_exists "module.data_factory_identity.azurerm_data_factory.this" "$data_factory_id"
+
+  # Admin role assignment for current operator on each Key Vault
+  if [[ -n "$principal_id" && "$principal_id" != "null" ]]; then
+    id="$(existing_role_assignment_id "$east_scope" "$principal_id" "Key Vault Administrator")"
+    import_if_exists "azurerm_role_assignment.eastus2_key_vault_admin_current" "$id"
+
+    id="$(existing_role_assignment_id "$canada_scope" "$principal_id" "Key Vault Administrator")"
+    import_if_exists "azurerm_role_assignment.canadaeast_key_vault_admin_current" "$id"
+  fi
+
+  # ADF managed identity role assignments on Canada East Key Vault
+  data_factory_principal_id="$(az datafactory show --resource-group "$canada_rg" --name "$data_factory_name" --query identity.principalId -o tsv 2>/dev/null || true)"
+  if [[ -n "$data_factory_principal_id" && "$data_factory_principal_id" != "null" ]]; then
+    id="$(existing_role_assignment_id "$canada_scope" "$data_factory_principal_id" "Key Vault Crypto Service Encryption User")"
+    import_if_exists "azurerm_role_assignment.canadaeast_data_factory_key_vault_crypto_user" "$id"
+
+    id="$(existing_role_assignment_id "$canada_scope" "$data_factory_principal_id" "Key Vault Secrets User")"
+    import_if_exists "azurerm_role_assignment.canadaeast_data_factory_key_vault_secrets_user" "$id"
+  fi
+
+  cmk_st_east="$(tfvar_string eastus2_storage_cmk_name)"
+  cmk_dl_east="$(tfvar_string eastus2_datalake_cmk_name)"
+  cmk_st_canada="$(tfvar_string canadaeast_storage_cmk_name)"
+  cmk_dl_canada="$(tfvar_string canadaeast_datalake_cmk_name)"
+  cmk_adf_canada="$(tfvar_string canadaeast_data_factory_cmk_name)"
+
+  id="$(az keyvault key show --vault-name "$east_kv" --name "$cmk_st_east" --query key.kid -o tsv 2>/dev/null || true)"
+  import_if_exists "module.eastus2_encryption_keys.azurerm_key_vault_key.this[\"${cmk_st_east}\"]" "$id"
+
+  id="$(az keyvault key show --vault-name "$east_kv" --name "$cmk_dl_east" --query key.kid -o tsv 2>/dev/null || true)"
+  import_if_exists "module.eastus2_encryption_keys.azurerm_key_vault_key.this[\"${cmk_dl_east}\"]" "$id"
+
+  id="$(az keyvault key show --vault-name "$canada_kv" --name "$cmk_st_canada" --query key.kid -o tsv 2>/dev/null || true)"
+  import_if_exists "module.canadaeast_encryption_keys.azurerm_key_vault_key.this[\"${cmk_st_canada}\"]" "$id"
+
+  id="$(az keyvault key show --vault-name "$canada_kv" --name "$cmk_dl_canada" --query key.kid -o tsv 2>/dev/null || true)"
+  import_if_exists "module.canadaeast_encryption_keys.azurerm_key_vault_key.this[\"${cmk_dl_canada}\"]" "$id"
+
+  id="$(az keyvault key show --vault-name "$canada_kv" --name "$cmk_adf_canada" --query key.kid -o tsv 2>/dev/null || true)"
+  import_if_exists "module.canadaeast_encryption_keys.azurerm_key_vault_key.this[\"${cmk_adf_canada}\"]" "$id"
+}
+
 phase3_bootstrap_tf_args() {
   if [[ "$BOOTSTRAP_NETWORK_OPEN" != true ]]; then
     return
@@ -337,6 +457,8 @@ echo "[INFO] Applying Phase 2 prerequisites (Key Vaults)..."
 tf apply -target=module.eastus2_key_vault -target=module.canadaeast_key_vault -var-file="$TFVARS_FILE" "${TF_APPROVE_ARGS[@]}"
 
 open_key_vault_bootstrap_access
+
+phase3_reconcile_existing_resources
 
 echo "[INFO] Applying Data Factory identity prerequisite..."
 tf apply -target=module.data_factory_identity -var-file="$TFVARS_FILE" "${TF_APPROVE_ARGS[@]}"

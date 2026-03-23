@@ -109,32 +109,41 @@ echo "[INFO] Resource group: $RESOURCE_GROUP"
 echo "[INFO] Lookback window: ${HOURS}h ($START_UTC to $END_UTC)"
 echo "[INFO] Pipelines: $PIPELINES_CSV"
 
-declare -A TRIGGER_BY_PIPELINE=(
-  [copyfilesharepipeline]=CopyFileShareTrigger
-  [copydatalakegen2pipeline]=CopyDataLakeGen2Trigger
+declare -A TRIGGER_CANDIDATES_BY_PIPELINE=(
+  [copyfilesharepipeline]="copyfilesharetrigger CopyFileShareTrigger"
+  [copydatalakegen2pipeline]="copydatalakegen2trigger CopyDataLakeGen2Trigger"
 )
 
 if [[ "$CHECK_TRIGGERS" == true ]]; then
   echo "[INFO] Checking trigger runtime states..."
   for pipeline in "${PIPELINES[@]}"; do
-    trigger_name="${TRIGGER_BY_PIPELINE[$pipeline]:-}"
-    if [[ -z "$trigger_name" ]]; then
+    trigger_candidates="${TRIGGER_CANDIDATES_BY_PIPELINE[$pipeline]:-}"
+    if [[ -z "$trigger_candidates" ]]; then
       echo "[WARN] No trigger mapping defined for pipeline '$pipeline'; skipping trigger check."
       continue
     fi
 
-    state="$(az datafactory trigger show \
-      --factory-name "$DATA_FACTORY" \
-      --resource-group "$RESOURCE_GROUP" \
-      --name "$trigger_name" \
-      --query properties.runtimeState -o tsv 2>/dev/null || true)"
+    state=""
+    resolved_trigger=""
+
+    for trigger_name in $trigger_candidates; do
+      state="$(az datafactory trigger show \
+        --factory-name "$DATA_FACTORY" \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$trigger_name" \
+        --query properties.runtimeState -o tsv 2>/dev/null || true)"
+      if [[ -n "$state" ]]; then
+        resolved_trigger="$trigger_name"
+        break
+      fi
+    done
 
     if [[ -z "$state" ]]; then
-      echo "[WARN] Trigger '$trigger_name' not found or unreadable."
+      echo "[WARN] Trigger not found or unreadable for pipeline '$pipeline' (tried: $trigger_candidates)."
       continue
     fi
 
-    echo "[INFO] Trigger '$trigger_name' state: $state"
+    echo "[INFO] Trigger '$resolved_trigger' state: $state"
   done
 fi
 

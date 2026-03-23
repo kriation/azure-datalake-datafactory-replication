@@ -117,6 +117,31 @@ When these checks pass, the environment is fully stood up and ready for demonstr
 ./validate-adf-health.sh
 ```
 
+## Reset For Next-Day Demo (Keep Only RG + Empty Key Vaults)
+
+Use this when you want to purge the environment and keep only the two resource groups and two empty Key Vaults.
+
+Required permissions for the current operator:
+- `Owner` or `Contributor` on both demo resource groups.
+- `Key Vault Administrator` on both regional Key Vaults.
+
+```bash
+cd scripts
+./reset-to-keyvault-baseline.sh
+```
+
+Behavior:
+- Retains: resource groups and regional Key Vaults.
+- Removes: Phase 3 CMKs/RBAC identity resources, Phase 4 storage+datalake+CMK bindings, Phase 5/6 ADF resources and ADF Key Vault secrets, and Phase 1 network/private DNS resources.
+
+Optional flags:
+
+```bash
+./reset-to-keyvault-baseline.sh --dry-run
+./reset-to-keyvault-baseline.sh --no-auto-approve
+./reset-to-keyvault-baseline.sh -f demo.tfvars
+```
+
 ## Optional: Managed Private Endpoint Approval Helper
 
 If your environment requires manual managed private endpoint approvals for file-share routing through managed VNet IR:

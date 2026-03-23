@@ -11,6 +11,11 @@ TFVARS_FILE="demo.tfvars"
 AUTO_APPROVE=true
 DRY_RUN=false
 
+# shellcheck source=lib/storage-network-access.sh
+source "$SCRIPT_DIR/lib/storage-network-access.sh"
+# shellcheck source=lib/keyvault-network-access.sh
+source "$SCRIPT_DIR/lib/keyvault-network-access.sh"
+
 tfvar_string() {
   local variable_name="$1"
   local line
@@ -121,6 +126,68 @@ preflight_permissions() {
   fi
 }
 
+bootstrap_acl_access() {
+  local east_rg canada_rg
+  local east_kv canada_kv
+  local east_storage canada_storage
+  local east_datalake canada_datalake
+
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "[INFO] DRY RUN: skipping temporary network ACL bootstrap updates."
+    return 0
+  fi
+
+  east_rg="$(tf_output_or_tfvar eastus2_rg_name eastus2_rg_name || true)"
+  canada_rg="$(tf_output_or_tfvar canadaeast_rg_name canadaeast_rg_name || true)"
+  east_kv="$(tf_output_or_tfvar eastus2_key_vault_name eastus2_key_vault_name || true)"
+  canada_kv="$(tf_output_or_tfvar canadaeast_key_vault_name canadaeast_key_vault_name || true)"
+  east_storage="$(tf_output_or_tfvar eastus2_storage_name eastus2_storage_name || true)"
+  canada_storage="$(tf_output_or_tfvar canadaeast_storage_name canadaeast_storage_name || true)"
+  east_datalake="$(tf_output_or_tfvar eastus2_datalake_storage_name eastus2_datalake_storage_name || true)"
+  canada_datalake="$(tf_output_or_tfvar canadaeast_datalake_storage_name canadaeast_datalake_storage_name || true)"
+
+  detect_bootstrap_cidr
+  trap 'close_all_key_vault_access' EXIT
+
+  echo "[INFO] Applying temporary network ACL bootstrap rules before teardown..."
+
+  if [[ -n "$east_kv" ]] && az keyvault show --name "$east_kv" >/dev/null 2>&1; then
+    open_key_vault_access "$east_kv"
+  else
+    echo "[WARN] East US 2 Key Vault not found; skipping temporary ACL bootstrap for Key Vault."
+  fi
+
+  if [[ -n "$canada_kv" ]] && az keyvault show --name "$canada_kv" >/dev/null 2>&1; then
+    open_key_vault_access "$canada_kv"
+  else
+    echo "[WARN] Canada East Key Vault not found; skipping temporary ACL bootstrap for Key Vault."
+  fi
+
+  if [[ -n "$east_storage" && -n "$east_rg" ]] && az storage account show --name "$east_storage" --resource-group "$east_rg" >/dev/null 2>&1; then
+    open_storage_account_access "$east_storage" "$east_rg"
+  else
+    echo "[WARN] East US 2 file-share storage account not found; skipping temporary ACL bootstrap for storage."
+  fi
+
+  if [[ -n "$canada_storage" && -n "$canada_rg" ]] && az storage account show --name "$canada_storage" --resource-group "$canada_rg" >/dev/null 2>&1; then
+    open_storage_account_access "$canada_storage" "$canada_rg"
+  else
+    echo "[WARN] Canada East file-share storage account not found; skipping temporary ACL bootstrap for storage."
+  fi
+
+  if [[ -n "$east_datalake" && -n "$east_rg" ]] && az storage account show --name "$east_datalake" --resource-group "$east_rg" >/dev/null 2>&1; then
+    open_storage_account_access "$east_datalake" "$east_rg"
+  else
+    echo "[WARN] East US 2 Data Lake storage account not found; skipping temporary ACL bootstrap for storage."
+  fi
+
+  if [[ -n "$canada_datalake" && -n "$canada_rg" ]] && az storage account show --name "$canada_datalake" --resource-group "$canada_rg" >/dev/null 2>&1; then
+    open_storage_account_access "$canada_datalake" "$canada_rg"
+  else
+    echo "[WARN] Canada East Data Lake storage account not found; skipping temporary ACL bootstrap for storage."
+  fi
+}
+
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [options]
@@ -175,7 +242,7 @@ if [[ ! -f "$TFVARS_PATH" ]]; then
   exit 1
 fi
 
-for cmd in terraform az; do
+for cmd in terraform az jq curl; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "Error: required command '$cmd' is not installed or not in PATH."
     exit 1
@@ -260,6 +327,8 @@ fi
 
 echo "[INFO] Running RBAC preflight checks..."
 preflight_permissions
+
+bootstrap_acl_access
 
 destroy_phase56
 destroy_phase4_and_phase3

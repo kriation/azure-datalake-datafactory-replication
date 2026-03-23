@@ -11,8 +11,8 @@ resource "azurerm_resource_group_template_deployment" "pipeline" {
   parameters_content  = jsonencode({
     factoryName = { value = var.data_factory_name },
     keyVaultBaseUrl = { value = var.key_vault_uri },
-    sourceFileshareConnectionSecretName = { value = var.source_fileshare_connection_secret_name },
-    destFileshareConnectionSecretName   = { value = var.dest_fileshare_connection_secret_name },
+    sourceFileshareAccountName          = { value = var.source_storage_account },
+    destFileshareAccountName            = { value = var.dest_storage_account },
     sourceFileshareStorageResourceId    = { value = var.source_fileshare_storage_resource_id },
     destFileshareStorageResourceId      = { value = var.dest_fileshare_storage_resource_id },
     sourceDatalakeAccountName = { value = var.source_datalake_storage_account },

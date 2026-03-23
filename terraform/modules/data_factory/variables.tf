@@ -18,16 +18,6 @@ variable "key_vault_uri" {
   type        = string
 }
 
-variable "source_fileshare_connection_secret_name" {
-  description = "Secret name for source file share connection string"
-  type        = string
-}
-
-variable "dest_fileshare_connection_secret_name" {
-  description = "Secret name for destination file share connection string"
-  type        = string
-}
-
 variable "source_storage_account" {
   description = "Source Storage Account name (East US 2)"
   type        = string

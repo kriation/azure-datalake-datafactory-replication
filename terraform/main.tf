@@ -10,6 +10,19 @@ resource "azurerm_role_assignment" "adf_to_canadaeast_datalake" {
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = module.data_factory_identity.principal_id
 }
+
+# Azure Files RBAC: ADF managed identity needs data-plane access to both fileshare storage accounts
+resource "azurerm_role_assignment" "adf_to_eastus2_fileshare" {
+  scope                = module.eastus2_storage.id
+  role_definition_name = "Storage File Data Privileged Reader"
+  principal_id         = module.data_factory_identity.principal_id
+}
+
+resource "azurerm_role_assignment" "adf_to_canadaeast_fileshare" {
+  scope                = module.canadaeast_storage.id
+  role_definition_name = "Storage File Data Privileged Contributor"
+  principal_id         = module.data_factory_identity.principal_id
+}
 terraform {
   required_providers {
     azurerm = {
@@ -274,8 +287,6 @@ module "data_factory" {
   source_fileshare_storage_resource_id = module.eastus2_storage.id
   dest_fileshare_storage_resource_id   = module.canadaeast_storage.id
   key_vault_uri = module.canadaeast_key_vault.vault_uri
-  source_fileshare_connection_secret_name = azurerm_key_vault_secret.adf_source_fileshare_connection_string.name
-  dest_fileshare_connection_secret_name   = azurerm_key_vault_secret.adf_dest_fileshare_connection_string.name
   source_datalake_storage_account = module.eastus2_datalake.storage_account_name
   dest_datalake_storage_account   = module.canadaeast_datalake.storage_account_name
   resource_group_name = module.canadaeast_rg.name
@@ -287,8 +298,8 @@ module "data_factory" {
 
   depends_on = [
     azurerm_data_factory_customer_managed_key.canadaeast_data_factory_cmk_binding,
-    azurerm_key_vault_secret.adf_source_fileshare_connection_string,
-    azurerm_key_vault_secret.adf_dest_fileshare_connection_string,
+    azurerm_role_assignment.adf_to_eastus2_fileshare,
+    azurerm_role_assignment.adf_to_canadaeast_fileshare,
   ]
 }
 

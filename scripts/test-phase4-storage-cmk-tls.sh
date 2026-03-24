@@ -38,6 +38,8 @@ STORAGE_OPERATOR_ASSIGNMENT_EAST_ID=""
 STORAGE_OPERATOR_ASSIGNMENT_CANADA_ID=""
 STORAGE_DATA_PLANE_TIMEOUT_SECONDS=180
 STORAGE_DATA_PLANE_POLL_SECONDS=5
+FILESYSTEM_APPLY_RETRY_ATTEMPTS=3
+FILESYSTEM_APPLY_RETRY_DELAY_SECONDS=20
 
 usage() {
   cat <<EOF
@@ -433,6 +435,57 @@ wait_for_storage_data_plane_access() {
   exit 1
 }
 
+wait_for_storage_shared_key_data_plane_access() {
+  local account_name="$1"
+  local account_key="$2"
+  local elapsed=0
+
+  while [[ "$elapsed" -lt "$STORAGE_DATA_PLANE_TIMEOUT_SECONDS" ]]; do
+    if az storage fs list --account-name "$account_name" --account-key "$account_key" --only-show-errors >/dev/null 2>&1; then
+      return
+    fi
+
+    sleep "$STORAGE_DATA_PLANE_POLL_SECONDS"
+    elapsed=$((elapsed + STORAGE_DATA_PLANE_POLL_SECONDS))
+  done
+
+  echo "Error: shared-key DFS data-plane access did not propagate in time for account '$account_name'."
+  echo "       Terraform provider uses shared-key DFS calls for filesystem create/read checks."
+  exit 1
+}
+
+apply_datalake_filesystems_with_retry() {
+  local east_dl_key canada_dl_key attempt
+
+  load_storage_bootstrap_targets
+
+  east_dl_key="$(az storage account keys list --account-name "$STORAGE_BOOTSTRAP_EAST_DATALAKE" --resource-group "$STORAGE_BOOTSTRAP_EAST_RG" --query '[0].value' -o tsv)"
+  canada_dl_key="$(az storage account keys list --account-name "$STORAGE_BOOTSTRAP_CANADA_DATALAKE" --resource-group "$STORAGE_BOOTSTRAP_CANADA_RG" --query '[0].value' -o tsv)"
+
+  for (( attempt=1; attempt<=FILESYSTEM_APPLY_RETRY_ATTEMPTS; attempt++ )); do
+    echo "[INFO] Creating Data Lake filesystems (attempt ${attempt}/${FILESYSTEM_APPLY_RETRY_ATTEMPTS})..."
+    if tf apply \
+      -target=module.eastus2_datalake \
+      -target=module.canadaeast_datalake \
+      -var-file="$TFVARS_FILE" \
+      -var=create_datalake_filesystems=true \
+      -var=storage_public_network_access_enabled=true \
+      "${TF_APPROVE_ARGS[@]}"; then
+      return 0
+    fi
+
+    if (( attempt < FILESYSTEM_APPLY_RETRY_ATTEMPTS )); then
+      echo "[WARN] Data Lake filesystem apply failed. Revalidating DFS shared-key access and retrying in ${FILESYSTEM_APPLY_RETRY_DELAY_SECONDS}s..."
+      wait_for_storage_shared_key_data_plane_access "$STORAGE_BOOTSTRAP_EAST_DATALAKE" "$east_dl_key"
+      wait_for_storage_shared_key_data_plane_access "$STORAGE_BOOTSTRAP_CANADA_DATALAKE" "$canada_dl_key"
+      sleep "$FILESYSTEM_APPLY_RETRY_DELAY_SECONDS"
+    fi
+  done
+
+  echo "Error: Data Lake filesystem apply failed after ${FILESYSTEM_APPLY_RETRY_ATTEMPTS} attempts."
+  return 1
+}
+
 add_storage_network_rule() {
   local account_name="$1"
   local resource_group="$2"
@@ -492,9 +545,19 @@ open_storage_operator_data_plane_access() {
     STORAGE_OPERATOR_ASSIGNMENT_CANADA_ID="$(az role assignment create --assignee-object-id "$STORAGE_OPERATOR_OBJECT_ID" --assignee-principal-type User --role "Storage Blob Data Owner" --scope "$canada_scope" --query id -o tsv)"
   fi
 
-  echo "[INFO] Verifying DFS data-plane access before filesystem creation..."
+  echo "[INFO] Verifying DFS OAuth data-plane access before filesystem creation..."
   wait_for_storage_data_plane_access "$STORAGE_BOOTSTRAP_EAST_DATALAKE"
   wait_for_storage_data_plane_access "$STORAGE_BOOTSTRAP_CANADA_DATALAKE"
+
+  # Terraform provider v4.x uses Shared Key auth for DFS operations by default.
+  # Verify shared key access separately, as a freshly created storage account can
+  # pass OAuth checks while its HMAC signing key is still propagating.
+  echo "[INFO] Verifying DFS Shared Key access (required by Terraform v4.x provider)..."
+  local east_dl_key canada_dl_key
+  east_dl_key="$(az storage account keys list --account-name "$STORAGE_BOOTSTRAP_EAST_DATALAKE" --resource-group "$STORAGE_BOOTSTRAP_EAST_RG" --query '[0].value' -o tsv)"
+  canada_dl_key="$(az storage account keys list --account-name "$STORAGE_BOOTSTRAP_CANADA_DATALAKE" --resource-group "$STORAGE_BOOTSTRAP_CANADA_RG" --query '[0].value' -o tsv)"
+  wait_for_storage_shared_key_data_plane_access "$STORAGE_BOOTSTRAP_EAST_DATALAKE" "$east_dl_key"
+  wait_for_storage_shared_key_data_plane_access "$STORAGE_BOOTSTRAP_CANADA_DATALAKE" "$canada_dl_key"
 
   STORAGE_OPERATOR_RBAC_OPEN=true
 }
@@ -651,14 +714,7 @@ open_storage_bootstrap_access
 
 open_storage_operator_data_plane_access
 
-echo "[INFO] Creating Data Lake filesystems..."
-tf apply \
-  -target=module.eastus2_datalake \
-  -target=module.canadaeast_datalake \
-  -var-file="$TFVARS_FILE" \
-  -var=create_datalake_filesystems=true \
-  -var=storage_public_network_access_enabled=true \
-  "${TF_APPROVE_ARGS[@]}"
+apply_datalake_filesystems_with_retry
 
 echo "[INFO] Applying Phase 4 storage Key Vault RBAC and CMK bindings..."
 tf apply \

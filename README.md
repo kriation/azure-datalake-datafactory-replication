@@ -66,7 +66,7 @@ This script invokes prerequisite phases internally and completes the storage/sec
 
 This step is mandatory for a working demonstration because it deploys the Data Factory replication artifacts.
 
-4. Approve managed VNet private endpoints (REQUIRED).
+4. Approve managed VNet private endpoints.
 
 ```bash
 ./approve-managed-private-endpoints.sh

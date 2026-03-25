@@ -50,7 +50,10 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 - `scripts/test-phase3-cmk.sh`: Self-contained Phase 3 integration test for CMK creation and RBAC validation
 - `scripts/test-phase4-storage-cmk-tls.sh`: Self-contained Phase 4 integration test for storage CMK bindings and TLS/public-access validation
 - `scripts/execute-phase5-6.sh`: Self-contained Phase 5/6 orchestration (ADF CMK, KV secrets, ARM deployment, and artifact validation/remediation)
+- `scripts/approve-managed-private-endpoints.sh`: Approves managed private endpoint connections created by ADF managed VNet IR for fileshare routing
 - `scripts/populate-source-fileshare.sh`: Populates the source file share with random files for demo/testing
+- `scripts/populate-source-datalake.sh`: Populates the source Data Lake Gen2 filesystem with random files for demo/testing
+- `scripts/toggle-datalake-trigger.sh`: CLI tool to start/stop the Data Lake Gen2 replication trigger
 - `scripts/validate-adf-health.sh`: Minimal ADF replication health gate for trigger state and recent pipeline outcomes
 - `scripts/toggle-trigger.sh`: CLI tool to start/stop the Data Factory pipeline trigger
 - `scripts/reset-to-keyvault-baseline.sh`: Repeatable teardown to keep only demo resource groups and empty Key Vaults
@@ -61,6 +64,11 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 3. Preferred script-first deployment flow for a complete demo environment:
 	 - `scripts/test-phase4-storage-cmk-tls.sh --keep`
 	 - `scripts/execute-phase5-6.sh`
+	 - `scripts/approve-managed-private-endpoints.sh`
+	 - `scripts/populate-source-datalake.sh`
+	 - `scripts/populate-source-fileshare.sh`
+	 - `scripts/toggle-trigger.sh start`
+	 - `scripts/toggle-datalake-trigger.sh start`
 	 - `scripts/validate-adf-health.sh`
 4. Use phased Terraform `-target` applies only for advanced/manual recovery or development of a specific hardening phase.
 5. Prefer the self-contained phase gate scripts for validation:
@@ -69,10 +77,11 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 	 - `scripts/test-phase3-cmk.sh`
 	 - `scripts/test-phase4-storage-cmk-tls.sh`
 6. After phased validation, use full `terraform plan -var-file=demo.tfvars` and `terraform apply -var-file=demo.tfvars` only from an environment that can reach the private data plane. From a public workstation after Phase 4 lockdown, use `terraform plan -refresh=false -var-file=demo.tfvars` for convergence checks and the phase gate scripts for refreshed validation.
-7. (Optional) Run `scripts/populate-source-fileshare.sh` or `scripts/populate-source-datalake.sh` to add demo data
-8. (Optional) Use `scripts/toggle-trigger.sh start|stop` or `scripts/toggle-datalake-trigger.sh start|stop` to control the scheduled pipelines
-9. (Recommended) Validate replication health with `scripts/validate-adf-health.sh` (or scope with `--pipelines copydatalakegen2pipeline` while fileshare private connectivity hardening is in progress)
-10. (Reset for next test cycle) Run `scripts/reset-to-keyvault-baseline.sh` to keep only the two RGs and empty Key Vaults.
+7. `scripts/approve-managed-private-endpoints.sh` is required after Phase 5/6 to enable fileshare replication over managed private endpoints.
+8. Use `scripts/populate-source-fileshare.sh` and `scripts/populate-source-datalake.sh` to add demo data before starting triggers.
+9. Use `scripts/toggle-trigger.sh start|stop` and `scripts/toggle-datalake-trigger.sh start|stop` to control scheduled pipelines.
+10. Validate replication health with `scripts/validate-adf-health.sh` (or scope with `--pipelines copydatalakegen2pipeline` while fileshare private connectivity hardening is in progress).
+11. (Reset for next test cycle) Run `scripts/reset-to-keyvault-baseline.sh` to keep only the two RGs and empty Key Vaults.
 
 ## Conventions & Patterns
 - All cross-module secrets (storage connection strings) are passed via module outputs and variables—no manual secret editing required
@@ -107,7 +116,13 @@ This repository demonstrates a fully automated, multi-region Azure deployment us
 
 - Planned remaining phases after Phase 8:
 	- Phase 9: End-to-end replication validation and operational runbooks
-- Current Phase 8 status: Infrastructure deployed; pending approval of managed private endpoints and replication validation
-- To complete Phase 8: Review private endpoint approval flow in storage account settings and approve managed private endpoints from the ADF managed VNet
+- Current Phase 8 status: Infrastructure deployed; managed private endpoint approval and replication validation are now part of the required operator workflow
+- To complete Phase 8 in a deployment run: execute `scripts/approve-managed-private-endpoints.sh`, then start triggers and validate with `scripts/validate-adf-health.sh`
 - If you encounter ARM template errors, check for case-sensitive name mismatches and resource ordering in pipeline.json.
 - See `README.md` for phased deployment and validation details
+
+## Contributor Guardrails
+- Keep `README.md` as the source of truth for operator workflow order. If workflow steps change, update `README.md` and this file in the same pull request.
+- Any new or renamed script in `scripts/` must be added to both `README.md` and the **Key Files & Structure** section here.
+- Preserve script-first onboarding for new contributors; avoid introducing Terraform-only quick paths that bypass required operational scripts.
+- Keep Data Factory artifact naming and ordering case-consistent in `terraform/modules/data_factory/pipeline.json` to avoid ARM deployment drift.

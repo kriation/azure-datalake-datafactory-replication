@@ -66,7 +66,29 @@ This script invokes prerequisite phases internally and completes the storage/sec
 
 This step is mandatory for a working demonstration because it deploys the Data Factory replication artifacts.
 
-4. Validate environment health.
+4. Approve managed VNet private endpoints (REQUIRED).
+
+```bash
+./approve-managed-private-endpoints.sh
+```
+
+This approval is required before replication can route traffic through the managed VNet integration runtime. Skipping this step will prevent the file-share replication pipeline from running successfully.
+
+5. Populate source data.
+
+```bash
+./populate-source-datalake.sh
+./populate-source-fileshare.sh
+```
+
+6. Start replication triggers.
+
+```bash
+./toggle-trigger.sh start
+./toggle-datalake-trigger.sh start
+```
+
+7. Validate environment health.
 
 ```bash
 ./validate-adf-health.sh
@@ -76,21 +98,6 @@ Expected healthy output includes all of the following:
 - Trigger states = `Started`
 - Latest run status = `Succeeded` for `copyfilesharepipeline` and `copydatalakegen2pipeline`
 
-5. Generate demo data and let replication run.
-
-```bash
-./populate-source-fileshare.sh
-./populate-source-datalake.sh
-```
-
-6. Confirm trigger state (if needed) and re-check health.
-
-```bash
-./toggle-trigger.sh start
-./toggle-datalake-trigger.sh start
-./validate-adf-health.sh
-```
-
 When these checks pass, the environment is fully stood up and ready for demonstration.
 
 ## Daily Operations (After Initial Stand-Up)
@@ -98,8 +105,8 @@ When these checks pass, the environment is fully stood up and ready for demonstr
 - Populate source data:
 
 ```bash
-./populate-source-fileshare.sh
 ./populate-source-datalake.sh
+./populate-source-fileshare.sh
 ```
 
 - Trigger control:
@@ -142,27 +149,9 @@ Optional flags:
 ./reset-to-keyvault-baseline.sh -f demo.tfvars
 ```
 
-## Optional: Managed Private Endpoint Approval Helper
-
-If your environment requires manual managed private endpoint approvals for file-share routing through managed VNet IR:
-
-```bash
-./approve-managed-private-endpoints.sh
-```
-
 ## Notes
 
-- In locked-down/public-workstation contexts, run the repository scripts instead of direct Terraform plan/apply commands:
-
-```bash
-cd ../scripts
-./test-phase4-storage-cmk-tls.sh
-./execute-phase5-6.sh
-./validate-adf-health.sh
-```
-
-- `execute-phase5-6.sh` is required for full deployment completion because it deploys the Data Factory ARM artifacts used for replication.
-
+- In locked-down/public-workstation contexts, use the repository scripts rather than direct `terraform plan`/`terraform apply` commands — the phase scripts handle temporary network access and state reconciliation automatically.
 - Data Factory CMK binding is effectively permanent; removing it requires Data Factory recreation.
 - ADF ARM template names and resource order are case-sensitive.
 

@@ -534,8 +534,14 @@ main() {
   echo "  ✓ Network ACLs restored to Disabled (Phase 4 lockdown maintained automatically)"
   echo ""
   echo "Next steps:"
-  echo "  1. Validate replication with: ./validate-adf-health.sh"
-  echo "  2. Review Phase 8 roadmap for Managed VNet IR deployment"
+  echo "  1. Approve managed VNet private endpoints (REQUIRED): ./approve-managed-private-endpoints.sh"
+  echo "  2. Populate source data:"
+  echo "       ./populate-source-datalake.sh"
+  echo "       ./populate-source-fileshare.sh"
+  echo "  3. Start replication triggers:"
+  echo "       ./toggle-trigger.sh start"
+  echo "       ./toggle-datalake-trigger.sh start"
+  echo "  4. Validate replication health: ./validate-adf-health.sh"
   echo ""
 }
 

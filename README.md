@@ -1,164 +1,148 @@
-# Azure Files + ADLS Gen2 Replication Framework
+# Azure Files + ADLS Gen2 Replication Demo
 
-This repository is a practical framework for deploying secure replication between two non-paired Azure regions for business continuity.
+This repo deploys a secure, script-driven demo that replicates data from East US 2 to Canada East.
 
-Replication scope:
+What replicates:
 - Azure Files (SMB)
-- Azure Data Lake Storage Gen2 (ADLSv2)
+- ADLS Gen2
 
-Control plane:
-- Azure Data Factory in Canada East
+How replication works:
+- Copy pipelines run every 5 minutes using incremental watermark windows.
+- Reconciliation pipelines run twice daily to delete destination-only items.
+- A dedicated checkpoint storage account stores cursor state and operational logs.
 
-Security model:
-- Private networking (VNets, PE subnets, private DNS)
-- Regional Key Vaults with deny-by-default access
-- Customer-managed keys (CMK) for storage and Data Factory
-- Storage hardened to TLS1_2 and no public network access
+## What Gets Deployed
 
-## What This Deploys
-
-- East US 2 and Canada East resource groups
-- Regional network foundations for private-link dependent services
-- Regional Key Vaults and CMK keys
-- Azure Files + ADLS Gen2 in both regions
-- Data Factory pipelines/triggers/linked services via ARM template
-- Key Vault secret-backed linked service connection strings
+- Resource groups in East US 2 and Canada East
+- VNets, private endpoint subnet, and private DNS zones
+- Key Vault in each region with RBAC and private access
+- CMKs for storage and Data Factory
+- File share storage in both regions
+- ADLS Gen2 storage in both regions
+- Data Factory with managed VNet IR, linked services, datasets, pipelines, and triggers
+- Checkpoint storage account and `adf-checkpoints` container
 
 ## Prerequisites
 
 - Azure CLI authenticated (`az login`)
 - Terraform installed
-- Sufficient Azure permissions for networking, RBAC, Key Vault, storage, and Data Factory
+- Permissions for RG, network, Key Vault, RBAC, storage, and Data Factory
 
-## Script Purpose Guide
+## Quick Start (Script-First)
 
-- `test-phase1-network.sh`: builds and validates base networking (resource groups, VNets, private endpoint subnet, private DNS).
-- `test-phase2-keyvault.sh`: builds and validates regional Key Vaults with private access controls.
-- `test-phase3-cmk.sh`: builds and validates CMKs and required Key Vault RBAC.
-- `test-phase4-storage-cmk-tls.sh`: deployment gate that bootstraps phases 1-3, deploys storage and ADLS Gen2, applies storage CMK bindings, enforces TLS/public access policy, and validates the result.
-- `execute-phase5-6.sh`: required Phase 5-6 gate that applies ADF CMK + Key Vault secrets and deploys Data Factory artifacts (linked services, datasets, pipelines, triggers).
-- `validate-adf-health.sh`: runtime health check for ADF triggers and latest pipeline outcomes.
-
-## Required Path For A Working Demo
-
-1. Configure environment values.
+1. Configure names and subscription values.
 
 ```bash
 cd terraform
 terraform init
-# edit demo.tfvars for your subscription/tenant/resource names
+# Edit demo.tfvars
 ```
 
-2. Run the required storage/security gate.
+2. Build storage/security baseline.
 
 ```bash
 cd ../scripts
 ./test-phase4-storage-cmk-tls.sh --keep
 ```
 
-This script invokes prerequisite phases internally and completes the storage/security baseline.
-
-3. Run the required Phase 5-6 gate.
+3. Deploy Data Factory artifacts and secrets.
 
 ```bash
 ./execute-phase5-6.sh
 ```
 
-This step is mandatory for a working demonstration because it deploys the Data Factory replication artifacts.
-
-4. Approve managed VNet private endpoints.
+4. Approve managed private endpoints.
 
 ```bash
 ./approve-managed-private-endpoints.sh
 ```
 
-This approval is required before replication can route traffic through the managed VNet integration runtime. Skipping this step will prevent the file-share replication pipeline from running successfully.
-
-5. Populate source data.
+5. Add sample source data.
 
 ```bash
 ./populate-source-datalake.sh
 ./populate-source-fileshare.sh
 ```
 
-6. Start replication triggers.
+6. Start all replication triggers.
 
 ```bash
 ./toggle-trigger.sh start
 ./toggle-datalake-trigger.sh start
+./toggle-fileshare-reconcile-trigger.sh start
+./toggle-datalake-reconcile-trigger.sh start
 ```
 
-7. Validate environment health.
+7. Validate health.
 
 ```bash
 ./validate-adf-health.sh
 ```
 
-Expected healthy output includes all of the following:
-- Trigger states = `Started`
-- Latest run status = `Succeeded` for `copyfilesharepipeline` and `copydatalakegen2pipeline`
+Healthy baseline:
+- Triggers are `Started`
+- Latest runs are `Succeeded` for:
+  - `copyfilesharepipeline`
+  - `copydatalakegen2pipeline`
+  - `deletereconcilefilesharepipeline`
+  - `deletereconciledalakepipeline`
 
-When these checks pass, the environment is fully stood up and ready for demonstration.
+## Day 2 Operations
 
-## Daily Operations (After Initial Stand-Up)
-
-- Populate source data:
+Populate source:
 
 ```bash
 ./populate-source-datalake.sh
 ./populate-source-fileshare.sh
 ```
 
-- Trigger control:
+Control triggers:
 
 ```bash
 ./toggle-trigger.sh start
 ./toggle-trigger.sh stop
 ./toggle-datalake-trigger.sh start
 ./toggle-datalake-trigger.sh stop
+./toggle-fileshare-reconcile-trigger.sh start
+./toggle-fileshare-reconcile-trigger.sh stop
+./toggle-datalake-reconcile-trigger.sh start
+./toggle-datalake-reconcile-trigger.sh stop
 ```
 
-- Health check:
+Health checks:
 
 ```bash
 ./validate-adf-health.sh
+./validate-adf-health.sh --skip-reconcile-check
 ```
 
-## Reset For Next-Day Demo (Keep Only RG + Empty Key Vaults)
-
-Use this when you want to purge the environment and keep only the two resource groups and two empty Key Vaults.
-
-Required permissions for the current operator:
-- `Owner` or `Contributor` on both demo resource groups.
-- `Key Vault Administrator` on both regional Key Vaults.
+## Reset to Baseline (Keep Resource Groups and Empty Key Vaults)
 
 ```bash
 cd scripts
 ./reset-to-keyvault-baseline.sh
 ```
 
-Behavior:
-- Retains: resource groups and regional Key Vaults.
-- Removes: Phase 3 CMKs/RBAC identity resources, Phase 4 storage+datalake+CMK bindings, Phase 5/6 ADF resources and ADF Key Vault secrets, and Phase 1 network/private DNS resources.
-
-Optional flags:
+Useful options:
 
 ```bash
 ./reset-to-keyvault-baseline.sh --dry-run
 ./reset-to-keyvault-baseline.sh --no-auto-approve
+./reset-to-keyvault-baseline.sh --preserve-checkpoint-audit
+./reset-to-keyvault-baseline.sh --no-preserve-checkpoint-audit
 ./reset-to-keyvault-baseline.sh -f demo.tfvars
 ```
 
 ## Notes
 
-- In locked-down/public-workstation contexts, use the repository scripts rather than direct `terraform plan`/`terraform apply` commands — the phase scripts handle temporary network access and state reconciliation automatically.
+- Keep `demo.tfvars` as the environment input file.
+- ARM resource names/order are case-sensitive in the Data Factory template.
+- Reconciliation includes a per-run delete cap for demo safety.
 - Data Factory CMK binding is effectively permanent; removing it requires Data Factory recreation.
-- ADF ARM template names and resource order are case-sensitive.
 
-## Repository Structure
+## Repository Layout
 
-- `terraform/`: Root Terraform configuration and modules
-- `terraform/modules/`: Network, Key Vault, encryption keys, storage, datalake, Data Factory modules
-- `scripts/`: Phase deployment/validation scripts and operational helpers
-
-For contributor/agent guidance, see `.github/copilot-instructions.md`.
+- `terraform/`: root Terraform and variable files
+- `terraform/modules/`: reusable modules (network, key vault, encryption keys, storage, datalake, checkpoint storage, data factory)
+- `scripts/`: deployment, validation, trigger, and reset operations
+- `.github/copilot-instructions.md`: contributor/agent implementation guidance

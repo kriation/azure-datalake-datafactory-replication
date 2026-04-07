@@ -27,7 +27,7 @@ Current phase status:
 - `terraform/demo.tfvars`: environment values
 - `terraform/modules/checkpoint_storage_account/`: checkpoint account and container
 - `terraform/modules/data_factory/pipeline.json`: linked services, datasets, pipelines, triggers
-- `scripts/execute-phase5-6.sh`: deploy ADF CMK + artifacts
+- `scripts/execute-phase5-6.sh`: deploy ADF CMK + artifacts, then seed missing checkpoint blobs for first-run safety
 - `scripts/approve-managed-private-endpoints.sh`: approve managed private endpoints
 - `scripts/validate-adf-health.sh`: health checks for copy and reconciliation
 - `scripts/toggle-trigger.sh`: fileshare copy trigger control

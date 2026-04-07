@@ -22,8 +22,9 @@ set -euo pipefail
 RESOURCE_GROUP="rg-demo-canadaeast"
 DATA_FACTORY="dfdemocanadaeast"
 HOURS=6
-PIPELINES_CSV="copyfilesharepipeline,copydatalakegen2pipeline"
+PIPELINES_CSV="copyfilesharepipeline,copydatalakegen2pipeline,deletereconcilefilesharepipeline,deletereconciledalakepipeline"
 CHECK_TRIGGERS=true
+CHECK_RECONCILE=true
 
 usage() {
   cat <<EOF
@@ -33,7 +34,8 @@ Options:
   -g, --resource-group NAME   Resource group (default: rg-demo-canadaeast)
   -f, --factory NAME          Data Factory name (default: dfdemocanadaeast)
   -w, --hours N               Lookback window in hours (default: 6)
-  -p, --pipelines CSV         Comma-separated pipeline names (default: copyfilesharepipeline,copydatalakegen2pipeline)
+    -p, --pipelines CSV         Comma-separated pipeline names (default: copyfilesharepipeline,copydatalakegen2pipeline,deletereconcilefilesharepipeline,deletereconciledalakepipeline)
+      --skip-reconcile-check  Skip delete-reconciliation pipelines in health evaluation
       --skip-trigger-check    Skip checking trigger runtime state
   -h, --help                  Show this help
 
@@ -41,6 +43,7 @@ Examples:
   ./scripts/validate-adf-health.sh
   ./scripts/validate-adf-health.sh --pipelines copydatalakegen2pipeline
   ./scripts/validate-adf-health.sh --hours 24 --skip-trigger-check
+  ./scripts/validate-adf-health.sh --skip-reconcile-check
 EOF
 }
 
@@ -64,6 +67,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-trigger-check)
       CHECK_TRIGGERS=false
+      shift
+      ;;
+    --skip-reconcile-check)
+      CHECK_RECONCILE=false
       shift
       ;;
     -h|--help)
@@ -104,6 +111,17 @@ if [[ "${#PIPELINES[@]}" -eq 0 ]]; then
   exit 2
 fi
 
+if [[ "$CHECK_RECONCILE" == false ]]; then
+  filtered=()
+  for p in "${PIPELINES[@]}"; do
+    if [[ "$p" != "deletereconcilefilesharepipeline" && "$p" != "deletereconciledalakepipeline" ]]; then
+      filtered+=("$p")
+    fi
+  done
+  PIPELINES=("${filtered[@]}")
+  PIPELINES_CSV="$(IFS=,; echo "${PIPELINES[*]}")"
+fi
+
 echo "[INFO] Factory: $DATA_FACTORY"
 echo "[INFO] Resource group: $RESOURCE_GROUP"
 echo "[INFO] Lookback window: ${HOURS}h ($START_UTC to $END_UTC)"
@@ -112,6 +130,8 @@ echo "[INFO] Pipelines: $PIPELINES_CSV"
 declare -A TRIGGER_CANDIDATES_BY_PIPELINE=(
   [copyfilesharepipeline]="copyfilesharetrigger CopyFileShareTrigger"
   [copydatalakegen2pipeline]="copydatalakegen2trigger CopyDataLakeGen2Trigger"
+  [deletereconcilefilesharepipeline]="deletereconcilefilesharetrigger DeleteReconcileFileShareTrigger"
+  [deletereconciledalakepipeline]="deletereconciledalakegen2trigger DeleteReconcileDataLakeGen2Trigger"
 )
 
 if [[ "$CHECK_TRIGGERS" == true ]]; then

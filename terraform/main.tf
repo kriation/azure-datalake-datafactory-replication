@@ -42,15 +42,15 @@ provider "azurerm" {
 }
 
 provider "azurerm" {
-  alias           = "eastus2"
-  features        {}
+  alias = "eastus2"
+  features {}
   subscription_id = var.subscription_id
   tenant_id       = var.tenant_id
 }
 
 provider "azurerm" {
-  alias           = "canadaeast"
-  features        {}
+  alias = "canadaeast"
+  features {}
   subscription_id = var.subscription_id
   tenant_id       = var.tenant_id
 }
@@ -106,49 +106,49 @@ module "canadaeast_network" {
 }
 
 module "eastus2_key_vault" {
-  source                         = "./modules/key_vault"
-  name                           = var.eastus2_key_vault_name
-  location                       = module.eastus2_rg.location
-  resource_group_name            = module.eastus2_rg.name
-  tenant_id                      = var.tenant_id
-  private_endpoint_subnet_id     = module.eastus2_network.private_endpoint_subnet_id
-  private_dns_zone_id            = module.eastus2_network.private_dns_zone_ids["privatelink.vaultcore.azure.net"]
-  sku_name                       = var.key_vault_sku_name
-  soft_delete_retention_days     = var.key_vault_soft_delete_retention_days
-  purge_protection_enabled       = var.key_vault_purge_protection_enabled
-  public_network_access_enabled  = var.key_vault_public_network_access_enabled
-  bypass                         = var.key_vault_bypass
-  ip_rules                       = var.key_vault_ip_rules
+  source                        = "./modules/key_vault"
+  name                          = var.eastus2_key_vault_name
+  location                      = module.eastus2_rg.location
+  resource_group_name           = module.eastus2_rg.name
+  tenant_id                     = var.tenant_id
+  private_endpoint_subnet_id    = module.eastus2_network.private_endpoint_subnet_id
+  private_dns_zone_id           = module.eastus2_network.private_dns_zone_ids["privatelink.vaultcore.azure.net"]
+  sku_name                      = var.key_vault_sku_name
+  soft_delete_retention_days    = var.key_vault_soft_delete_retention_days
+  purge_protection_enabled      = var.key_vault_purge_protection_enabled
+  public_network_access_enabled = var.key_vault_public_network_access_enabled
+  bypass                        = var.key_vault_bypass
+  ip_rules                      = var.key_vault_ip_rules
   providers = {
     azurerm = azurerm.eastus2
   }
 }
 
 module "canadaeast_key_vault" {
-  source                         = "./modules/key_vault"
-  name                           = var.canadaeast_key_vault_name
-  location                       = module.canadaeast_rg.location
-  resource_group_name            = module.canadaeast_rg.name
-  tenant_id                      = var.tenant_id
-  private_endpoint_subnet_id     = module.canadaeast_network.private_endpoint_subnet_id
-  private_dns_zone_id            = module.canadaeast_network.private_dns_zone_ids["privatelink.vaultcore.azure.net"]
-  sku_name                       = var.key_vault_sku_name
-  soft_delete_retention_days     = var.key_vault_soft_delete_retention_days
-  purge_protection_enabled       = var.key_vault_purge_protection_enabled
-  public_network_access_enabled  = var.key_vault_public_network_access_enabled
-  bypass                         = var.key_vault_bypass
-  ip_rules                       = var.key_vault_ip_rules
+  source                        = "./modules/key_vault"
+  name                          = var.canadaeast_key_vault_name
+  location                      = module.canadaeast_rg.location
+  resource_group_name           = module.canadaeast_rg.name
+  tenant_id                     = var.tenant_id
+  private_endpoint_subnet_id    = module.canadaeast_network.private_endpoint_subnet_id
+  private_dns_zone_id           = module.canadaeast_network.private_dns_zone_ids["privatelink.vaultcore.azure.net"]
+  sku_name                      = var.key_vault_sku_name
+  soft_delete_retention_days    = var.key_vault_soft_delete_retention_days
+  purge_protection_enabled      = var.key_vault_purge_protection_enabled
+  public_network_access_enabled = var.key_vault_public_network_access_enabled
+  bypass                        = var.key_vault_bypass
+  ip_rules                      = var.key_vault_ip_rules
   providers = {
     azurerm = azurerm.canadaeast
   }
 }
 
 module "eastus2_storage" {
-  source              = "./modules/storage_account"
-  name                = var.eastus2_storage_name
-  resource_group_name = module.eastus2_rg.name
-  location            = module.eastus2_rg.location
-  min_tls_version     = var.storage_min_tls_version
+  source                        = "./modules/storage_account"
+  name                          = var.eastus2_storage_name
+  resource_group_name           = module.eastus2_rg.name
+  location                      = module.eastus2_rg.location
+  min_tls_version               = var.storage_min_tls_version
   public_network_access_enabled = var.storage_public_network_access_enabled
   providers = {
     azurerm = azurerm.eastus2
@@ -156,11 +156,11 @@ module "eastus2_storage" {
 }
 
 module "canadaeast_storage" {
-  source              = "./modules/storage_account"
-  name                = var.canadaeast_storage_name
-  resource_group_name = module.canadaeast_rg.name
-  location            = module.canadaeast_rg.location
-  min_tls_version     = var.storage_min_tls_version
+  source                        = "./modules/storage_account"
+  name                          = var.canadaeast_storage_name
+  resource_group_name           = module.canadaeast_rg.name
+  location                      = module.canadaeast_rg.location
+  min_tls_version               = var.storage_min_tls_version
   public_network_access_enabled = var.storage_public_network_access_enabled
   providers = {
     azurerm = azurerm.canadaeast
@@ -278,20 +278,31 @@ module "canadaeast_encryption_keys" {
 
 # Data Factory (pipelines, ARM, role assignments)
 module "data_factory" {
-  source              = "./modules/data_factory"
-  data_factory_id     = module.data_factory_identity.id
-  data_factory_name   = module.data_factory_identity.name
-  data_factory_principal_id = module.data_factory_identity.principal_id
-  source_storage_account = module.eastus2_storage.name
-  dest_storage_account   = module.canadaeast_storage.name
+  source                               = "./modules/data_factory"
+  data_factory_id                      = module.data_factory_identity.id
+  data_factory_name                    = module.data_factory_identity.name
+  data_factory_principal_id            = module.data_factory_identity.principal_id
+  source_storage_account               = module.eastus2_storage.name
+  dest_storage_account                 = module.canadaeast_storage.name
   source_fileshare_storage_resource_id = module.eastus2_storage.id
   dest_fileshare_storage_resource_id   = module.canadaeast_storage.id
-  key_vault_uri = module.canadaeast_key_vault.vault_uri
-  source_datalake_storage_account = module.eastus2_datalake.storage_account_name
-  dest_datalake_storage_account   = module.canadaeast_datalake.storage_account_name
-  resource_group_name = module.canadaeast_rg.name
-  source_datalake_filesystem_name = module.eastus2_datalake.filesystem_name
-  dest_datalake_filesystem_name   = module.canadaeast_datalake.filesystem_name
+  key_vault_uri                        = module.canadaeast_key_vault.vault_uri
+  source_datalake_storage_account      = module.eastus2_datalake.storage_account_name
+  dest_datalake_storage_account        = module.canadaeast_datalake.storage_account_name
+  resource_group_name                  = module.canadaeast_rg.name
+  source_datalake_filesystem_name      = module.eastus2_datalake.filesystem_name
+  dest_datalake_filesystem_name        = module.canadaeast_datalake.filesystem_name
+  # Checkpoint storage wiring for incremental sync
+  checkpoint_storage_account_name         = module.canadaeast_checkpoint_storage.name
+  checkpoint_storage_account_id           = module.canadaeast_checkpoint_storage.id
+  adf_checkpoint_container_name           = var.adf_checkpoint_container_name
+  adf_checkpoint_current_prefix           = var.adf_checkpoint_current_prefix
+  adf_checkpoint_journal_prefix           = var.adf_checkpoint_journal_prefix
+  adf_fileshare_checkpoint_blob_name      = var.adf_fileshare_checkpoint_blob_name
+  adf_datalake_checkpoint_blob_name       = var.adf_datalake_checkpoint_blob_name
+  adf_incremental_bootstrap_watermark     = var.adf_incremental_bootstrap_watermark
+  adf_delete_reconcile_schedule_hours     = var.adf_delete_reconcile_schedule_hours
+  adf_delete_reconcile_trigger_start_time = var.adf_delete_reconcile_trigger_start_time
   providers = {
     azurerm = azurerm.canadaeast
   }
@@ -300,6 +311,8 @@ module "data_factory" {
     azurerm_data_factory_customer_managed_key.canadaeast_data_factory_cmk_binding,
     azurerm_role_assignment.adf_to_eastus2_fileshare,
     azurerm_role_assignment.adf_to_canadaeast_fileshare,
+    azurerm_role_assignment.adf_to_checkpoint_storage,
+    module.canadaeast_checkpoint_storage,
   ]
 }
 
@@ -316,13 +329,13 @@ resource "azurerm_data_factory_customer_managed_key" "canadaeast_data_factory_cm
 
 # Data Lake Gen2 Storage Accounts and Filesystems
 module "eastus2_datalake" {
-  source                = "./modules/storage_account_datalake"
-  storage_account_name  = var.eastus2_datalake_storage_name
-  resource_group_name   = module.eastus2_rg.name
-  location              = module.eastus2_rg.location
-  filesystem_name       = var.eastus2_datalake_filesystem_name
-  create_filesystem     = var.create_datalake_filesystems
-  min_tls_version       = var.storage_min_tls_version
+  source                        = "./modules/storage_account_datalake"
+  storage_account_name          = var.eastus2_datalake_storage_name
+  resource_group_name           = module.eastus2_rg.name
+  location                      = module.eastus2_rg.location
+  filesystem_name               = var.eastus2_datalake_filesystem_name
+  create_filesystem             = var.create_datalake_filesystems
+  min_tls_version               = var.storage_min_tls_version
   public_network_access_enabled = var.storage_public_network_access_enabled
   providers = {
     azurerm = azurerm.eastus2
@@ -330,17 +343,40 @@ module "eastus2_datalake" {
 }
 
 module "canadaeast_datalake" {
-  source                = "./modules/storage_account_datalake"
-  storage_account_name  = var.canadaeast_datalake_storage_name
-  resource_group_name   = module.canadaeast_rg.name
-  location              = module.canadaeast_rg.location
-  filesystem_name       = var.canadaeast_datalake_filesystem_name
-  create_filesystem     = var.create_datalake_filesystems
-  min_tls_version       = var.storage_min_tls_version
+  source                        = "./modules/storage_account_datalake"
+  storage_account_name          = var.canadaeast_datalake_storage_name
+  resource_group_name           = module.canadaeast_rg.name
+  location                      = module.canadaeast_rg.location
+  filesystem_name               = var.canadaeast_datalake_filesystem_name
+  create_filesystem             = var.create_datalake_filesystems
+  min_tls_version               = var.storage_min_tls_version
   public_network_access_enabled = var.storage_public_network_access_enabled
   providers = {
     azurerm = azurerm.canadaeast
   }
+}
+
+# Dedicated checkpoint storage account for ADF incremental sync cursors
+module "canadaeast_checkpoint_storage" {
+  source                    = "./modules/checkpoint_storage_account"
+  name                      = var.canadaeast_checkpoint_storage_name
+  resource_group_name       = module.canadaeast_rg.name
+  location                  = module.canadaeast_rg.location
+  container_name            = var.adf_checkpoint_container_name
+  soft_delete_days          = var.adf_checkpoint_soft_delete_days
+  version_retention_days    = var.adf_checkpoint_version_retention_days
+  journal_immutability_days = var.adf_checkpoint_journal_immutability_days
+  immutability_mode         = var.adf_checkpoint_immutability_mode
+  providers = {
+    azurerm = azurerm.canadaeast
+  }
+}
+
+# Grant ADF MI Storage Blob Data Contributor on checkpoint storage account (isolated from workload storage)
+resource "azurerm_role_assignment" "adf_to_checkpoint_storage" {
+  scope                = module.canadaeast_checkpoint_storage.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = module.data_factory_identity.principal_id
 }
 
 resource "azurerm_role_assignment" "eastus2_storage_key_vault_crypto_user" {

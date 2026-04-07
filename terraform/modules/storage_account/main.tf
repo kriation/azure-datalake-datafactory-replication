@@ -10,6 +10,28 @@ resource "azurerm_storage_account" "this" {
   is_hns_enabled                  = false
   large_file_share_enabled        = true
 
+  dynamic "blob_properties" {
+    for_each = var.soft_delete_days > 0 || var.versioning_enabled || var.change_feed_enabled ? [1] : []
+    content {
+      versioning_enabled  = var.versioning_enabled
+      change_feed_enabled = var.change_feed_enabled
+
+      dynamic "delete_retention_policy" {
+        for_each = var.soft_delete_days > 0 ? [1] : []
+        content {
+          days = var.soft_delete_days
+        }
+      }
+
+      dynamic "container_delete_retention_policy" {
+        for_each = var.soft_delete_days > 0 ? [1] : []
+        content {
+          days = var.soft_delete_days
+        }
+      }
+    }
+  }
+
   identity {
     type = "SystemAssigned"
   }

@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 #
-# Approve all pending managed private endpoint connections for fileshare storage accounts.
+# Approve all pending managed private endpoint connections for fileshare and checkpoint storage accounts.
 #
 # Phase 8 helper: Approves private endpoint connections created by Data Factory managed VNet IR
-# so that fileshare linked services can route through the managed integration runtime.
+# so that linked services can route through the managed integration runtime.
 #
 # Prerequisites:
 # 1. Azure CLI installed and authenticated (az login)
-# 2. Contributor or Storage Account Contributor access to both fileshare storage accounts
+# 2. Contributor or Storage Account Contributor access to fileshare and checkpoint storage accounts
 # 3. Script is executable: chmod +x scripts/approve-managed-private-endpoints.sh
 #
 # Usage:
 #   ./approve-managed-private-endpoints.sh
-#   ./approve-managed-private-endpoints.sh -g rg-demo-eastus2 -a stdemoeastus2 -r rg-demo-canadaeast -s stdemocanadaeast
+#   ./approve-managed-private-endpoints.sh -g rg-demo-eastus2 -a stdemoeastus2 -r rg-demo-canadaeast -s stdemocanadaeast -c stdcheckpointcanadaeast
 
 set -euo pipefail
 
@@ -21,24 +21,28 @@ SOURCE_RG="rg-demo-eastus2"
 SOURCE_STORAGE="stdemoeastus2"
 DEST_RG="rg-demo-canadaeast"
 DEST_STORAGE="stdemocanadaeast"
+CHECKPOINT_RG="rg-demo-canadaeast"
+CHECKPOINT_STORAGE="stdcheckpointcanadaeast"
 
 # Usage info
 usage() {
-  echo "Usage: $0 [-g SOURCE_RG] [-a SOURCE_STORAGE] [-r DEST_RG] [-s DEST_STORAGE]"
+  echo "Usage: $0 [-g SOURCE_RG] [-a SOURCE_STORAGE] [-r DEST_RG] [-s DEST_STORAGE] [-c CHECKPOINT_STORAGE]"
   echo "  -g SOURCE_RG           Source resource group (default: rg-demo-eastus2)"
   echo "  -a SOURCE_STORAGE      Source storage account (default: stdemoeastus2)"
   echo "  -r DEST_RG             Destination resource group (default: rg-demo-canadaeast)"
   echo "  -s DEST_STORAGE        Destination storage account (default: stdemocanadaeast)"
+  echo "  -c CHECKPOINT_STORAGE  Checkpoint storage account (default: stdcheckpointcanadaeast)"
   exit 1
 }
 
 # Parse arguments
-while getopts "g:a:r:s:h" opt; do
+while getopts "g:a:r:s:c:h" opt; do
   case $opt in
     g) SOURCE_RG="$OPTARG" ;;
     a) SOURCE_STORAGE="$OPTARG" ;;
     r) DEST_RG="$OPTARG" ;;
     s) DEST_STORAGE="$OPTARG" ;;
+    c) CHECKPOINT_STORAGE="$OPTARG" ;;
     h) usage ;;
     *) usage ;;
   esac
@@ -115,14 +119,16 @@ approve_pending_endpoints() {
 }
 
 echo "=========================================="
-echo "Phase 8: Approve Managed Private Endpoints"
+echo "Approving Managed Private Endpoints"
 echo "=========================================="
 echo ""
 
-# Approve both storage accounts
+# Approve all storage accounts
 approve_pending_endpoints "$SOURCE_STORAGE" "$SOURCE_RG" "Source fileshare (East US 2)"
 echo ""
 approve_pending_endpoints "$DEST_STORAGE" "$DEST_RG" "Destination fileshare (Canada East)"
+echo ""
+approve_pending_endpoints "$CHECKPOINT_STORAGE" "$CHECKPOINT_RG" "Checkpoint storage (Canada East)"
 
 echo ""
 echo "[INFO] Private endpoint approval complete."

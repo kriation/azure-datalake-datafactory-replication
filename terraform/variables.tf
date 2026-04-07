@@ -257,3 +257,96 @@ variable "data_factory_dest_fileshare_connection_secret_name" {
   type        = string
   default     = "adf-dest-fileshare-connection-string"
 }
+
+# ---------------------------------------------------------------------------
+# Incremental sync checkpoint storage
+# ---------------------------------------------------------------------------
+
+variable "canadaeast_checkpoint_storage_name" {
+  description = "Storage Account name for the dedicated ADF checkpoint store in Canada East."
+  type        = string
+  default     = "stdcheckpointcanadaeast"
+}
+
+variable "adf_checkpoint_container_name" {
+  description = "Blob container name within the checkpoint storage account."
+  type        = string
+  default     = "adf-checkpoints"
+}
+
+variable "adf_checkpoint_journal_prefix" {
+  description = "Path prefix for immutable audit journal entries inside the checkpoint container."
+  type        = string
+  default     = "journal"
+}
+
+variable "adf_checkpoint_current_prefix" {
+  description = "Path prefix for mutable runtime checkpoint head blobs."
+  type        = string
+  default     = "current"
+}
+
+variable "adf_fileshare_checkpoint_blob_name" {
+  description = "Blob name for the file share sync state checkpoint."
+  type        = string
+  default     = "fileshare-sync-state.json"
+}
+
+variable "adf_datalake_checkpoint_blob_name" {
+  description = "Blob name for the Data Lake Gen2 sync state checkpoint."
+  type        = string
+  default     = "datalake-sync-state.json"
+}
+
+variable "adf_incremental_bootstrap_watermark" {
+  description = "Fallback watermark used on first invocation when no checkpoint blob exists."
+  type        = string
+  default     = "1970-01-01T00:00:00Z"
+}
+
+variable "adf_delete_reconcile_schedule_hours" {
+  description = "UTC hours at which the delete-reconciliation triggers fire each day (e.g. [6, 18])."
+  type        = list(number)
+  default     = [6, 18]
+}
+
+variable "adf_delete_reconcile_trigger_start_time" {
+  description = "ISO-8601 start time for delete-reconciliation ScheduleTriggers."
+  type        = string
+  default     = "2026-04-01T06:00:00Z"
+}
+
+variable "adf_checkpoint_soft_delete_days" {
+  description = "Blob soft-delete retention days for the checkpoint storage account."
+  type        = number
+  default     = 30
+}
+
+variable "adf_checkpoint_version_retention_days" {
+  description = "Non-current blob version retention days for the checkpoint storage account."
+  type        = number
+  default     = 30
+}
+
+variable "adf_checkpoint_journal_immutability_days" {
+  description = "Time-based immutability retention days applied to the checkpoint journal path."
+  type        = number
+  default     = 365
+}
+
+variable "adf_checkpoint_log_retention_days" {
+  description = "Diagnostic log retention days for checkpoint storage audit evidence."
+  type        = number
+  default     = 365
+}
+
+variable "adf_checkpoint_immutability_mode" {
+  description = "Immutability operating mode: 'demo-regulated' (unlocked, teardown-safe) or 'strict-regulated' (locked WORM)."
+  type        = string
+  default     = "demo-regulated"
+
+  validation {
+    condition     = contains(["demo-regulated", "strict-regulated"], var.adf_checkpoint_immutability_mode)
+    error_message = "adf_checkpoint_immutability_mode must be 'demo-regulated' or 'strict-regulated'."
+  }
+}

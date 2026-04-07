@@ -8,6 +8,16 @@
     "destFileshareAccountName": { "type": "String" },
     "sourceFileshareStorageResourceId": { "type": "String" },
     "destFileshareStorageResourceId": { "type": "String" },
+    "checkpointStorageAccountName": { "type": "String" },
+    "checkpointStorageResourceId": { "type": "String" },
+    "checkpointContainerName": { "type": "String" },
+    "checkpointCurrentPrefix": { "type": "String" },
+    "checkpointJournalPrefix": { "type": "String" },
+    "fileshareCheckpointBlobName": { "type": "String" },
+    "datalakeCheckpointBlobName": { "type": "String" },
+    "bootstrapWatermark": { "type": "String" },
+    "deleteReconcileScheduleHours": { "type": "String" },
+    "deleteReconcileTriggerStartTime": { "type": "String" },
     "sourceDatalakeAccountName": { "type": "String" },
     "destDatalakeAccountName": { "type": "String" },
     "sourceDatalakeFilesystem": { "type": "String" },
@@ -42,6 +52,18 @@
       "properties": {
         "groupId": "file",
         "privateLinkResourceId": "[parameters('destFileshareStorageResourceId')]"
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/managedVirtualNetworks/managedPrivateEndpoints",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/default/adf-checkpoint-pe')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/managedVirtualNetworks/default')]"
+      ],
+      "properties": {
+        "groupId": "blob",
+        "privateLinkResourceId": "[parameters('checkpointStorageResourceId')]"
       }
     },
     {
@@ -83,7 +105,7 @@
     {
       "type": "Microsoft.DataFactory/factories/linkedservices",
       "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/source-fileshare')]",
+      "name": "[concat(parameters('factoryName'), '/source_fileshare')]",
       "dependsOn": [
         "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/integrationruntimes/adf-managed-ir')]"
       ],
@@ -102,9 +124,13 @@
     {
       "type": "Microsoft.DataFactory/factories/linkedservices",
       "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/source-datalake')]",
+      "name": "[concat(parameters('factoryName'), '/source_datalake')]",
       "properties": {
         "type": "AzureBlobFS",
+        "connectVia": {
+          "referenceName": "adf-managed-ir",
+          "type": "IntegrationRuntimeReference"
+        },
         "typeProperties": {
           "url": "[concat('https://', parameters('sourceDatalakeAccountName'), '.dfs.core.windows.net')]"
         }
@@ -113,9 +139,13 @@
     {
       "type": "Microsoft.DataFactory/factories/linkedservices",
       "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/dest-datalake')]",
+      "name": "[concat(parameters('factoryName'), '/dest_datalake')]",
       "properties": {
         "type": "AzureBlobFS",
+        "connectVia": {
+          "referenceName": "adf-managed-ir",
+          "type": "IntegrationRuntimeReference"
+        },
         "typeProperties": {
           "url": "[concat('https://', parameters('destDatalakeAccountName'), '.dfs.core.windows.net')]"
         }
@@ -124,7 +154,7 @@
     {
       "type": "Microsoft.DataFactory/factories/linkedservices",
       "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/dest-fileshare')]",
+      "name": "[concat(parameters('factoryName'), '/dest_fileshare')]",
       "dependsOn": [
         "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/integrationruntimes/adf-managed-ir')]"
       ],
@@ -141,74 +171,215 @@
       }
     },
     {
-      "type": "Microsoft.DataFactory/factories/datasets",
+      "type": "Microsoft.DataFactory/factories/linkedservices",
       "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/source-fileshare')]",
+      "name": "[concat(parameters('factoryName'), '/checkpoint_storage')]",
       "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/source-fileshare')]"
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/integrationruntimes/adf-managed-ir')]"
       ],
       "properties": {
+        "type": "AzureBlobStorage",
+        "connectVia": {
+          "referenceName": "adf-managed-ir",
+          "type": "IntegrationRuntimeReference"
+        },
+        "typeProperties": {
+          "serviceEndpoint": "[concat('https://', parameters('checkpointStorageAccountName'), '.blob.core.windows.net')]",
+          "authenticationType": "ManagedIdentity"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/source_fileshare')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/source_fileshare')]"
+      ],
+      "properties": {
+        "parameters": {
+          "folderPath": {
+            "type": "String",
+            "defaultValue": "/"
+          },
+          "fileName": {
+            "type": "String",
+            "defaultValue": ""
+          }
+        },
         "linkedServiceName": {
-          "referenceName": "source-fileshare",
+          "referenceName": "source_fileshare",
           "type": "LinkedServiceReference"
         },
         "type": "AzureFile",
         "typeProperties": {
-          "folderPath": "/"
+          "folderPath": {
+            "value": "@dataset().folderPath",
+            "type": "Expression"
+          },
+          "fileName": {
+            "value": "@dataset().fileName",
+            "type": "Expression"
+          }
         }
       }
     },
     {
       "type": "Microsoft.DataFactory/factories/datasets",
       "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/source-datalake')]",
+      "name": "[concat(parameters('factoryName'), '/source_datalake')]",
       "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/source-datalake')]"
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/source_datalake')]"
       ],
       "properties": {
+        "parameters": {
+          "folderPath": {
+            "type": "String",
+            "defaultValue": "[parameters('sourceDatalakeFilesystem')]"
+          },
+          "fileName": {
+            "type": "String",
+            "defaultValue": ""
+          }
+        },
         "linkedServiceName": {
-          "referenceName": "source-datalake",
+          "referenceName": "source_datalake",
           "type": "LinkedServiceReference"
         },
         "type": "AzureBlobFSDataset",
         "typeProperties": {
-          "folderPath": "[parameters('sourceDatalakeFilesystem')]"
+          "folderPath": {
+            "value": "@dataset().folderPath",
+            "type": "Expression"
+          },
+          "fileName": {
+            "value": "@dataset().fileName",
+            "type": "Expression"
+          }
         }
       }
     },
     {
       "type": "Microsoft.DataFactory/factories/datasets",
       "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/dest-datalake')]",
+      "name": "[concat(parameters('factoryName'), '/dest_datalake')]",
       "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/dest-datalake')]"
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/dest_datalake')]"
       ],
       "properties": {
+        "parameters": {
+          "folderPath": {
+            "type": "String",
+            "defaultValue": "[parameters('destDatalakeFilesystem')]"
+          },
+          "fileName": {
+            "type": "String",
+            "defaultValue": ""
+          }
+        },
         "linkedServiceName": {
-          "referenceName": "dest-datalake",
+          "referenceName": "dest_datalake",
           "type": "LinkedServiceReference"
         },
         "type": "AzureBlobFSDataset",
         "typeProperties": {
-          "folderPath": "[parameters('destDatalakeFilesystem')]"
+          "folderPath": {
+            "value": "@dataset().folderPath",
+            "type": "Expression"
+          },
+          "fileName": {
+            "value": "@dataset().fileName",
+            "type": "Expression"
+          }
         }
       }
     },
     {
       "type": "Microsoft.DataFactory/factories/datasets",
       "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/dest-fileshare')]",
+      "name": "[concat(parameters('factoryName'), '/dest_fileshare')]",
       "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/dest-fileshare')]"
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/dest_fileshare')]"
       ],
       "properties": {
+        "parameters": {
+          "folderPath": {
+            "type": "String",
+            "defaultValue": "/"
+          },
+          "fileName": {
+            "type": "String",
+            "defaultValue": ""
+          }
+        },
         "linkedServiceName": {
-          "referenceName": "dest-fileshare",
+          "referenceName": "dest_fileshare",
           "type": "LinkedServiceReference"
         },
         "type": "AzureFile",
         "typeProperties": {
-          "folderPath": "/"
+          "folderPath": {
+            "value": "@dataset().folderPath",
+            "type": "Expression"
+          },
+          "fileName": {
+            "value": "@dataset().fileName",
+            "type": "Expression"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/fileshare_checkpoint')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/checkpoint_storage')]"
+      ],
+      "properties": {
+        "linkedServiceName": {
+          "referenceName": "checkpoint_storage",
+          "type": "LinkedServiceReference"
+        },
+        "type": "Json",
+        "typeProperties": {
+          "location": {
+            "type": "AzureBlobStorageLocation",
+            "container": "[parameters('checkpointContainerName')]",
+            "folderPath": "[parameters('checkpointCurrentPrefix')]",
+            "fileName": "[parameters('fileshareCheckpointBlobName')]"
+          },
+          "format": {
+            "type": "JsonFormat",
+            "filePattern": "setOfObjects"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/datalake_checkpoint')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/checkpoint_storage')]"
+      ],
+      "properties": {
+        "linkedServiceName": {
+          "referenceName": "checkpoint_storage",
+          "type": "LinkedServiceReference"
+        },
+        "type": "Json",
+        "typeProperties": {
+          "location": {
+            "type": "AzureBlobStorageLocation",
+            "container": "[parameters('checkpointContainerName')]",
+            "folderPath": "[parameters('checkpointCurrentPrefix')]",
+            "fileName": "[parameters('datalakeCheckpointBlobName')]"
+          },
+          "format": {
+            "type": "JsonFormat",
+            "filePattern": "setOfObjects"
+          }
         }
       }
     },
@@ -217,15 +388,111 @@
       "apiVersion": "2018-06-01",
       "name": "[concat(parameters('factoryName'), '/copyfilesharepipeline')]",
       "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source-fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest-fileshare')]"
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_fileshare')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_fileshare')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/fileshare_checkpoint')]"
       ],
       "properties": {
+        "concurrency": 1,
+        "parameters": {
+          "checkpointStorageAccountName": {
+            "type": "String",
+            "defaultValue": "[parameters('checkpointStorageAccountName')]"
+          },
+          "checkpointContainerName": {
+            "type": "String",
+            "defaultValue": "[parameters('checkpointContainerName')]"
+          },
+          "checkpointCurrentPrefix": {
+            "type": "String",
+            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
+          },
+          "fileshareCheckpointBlobName": {
+            "type": "String",
+            "defaultValue": "[parameters('fileshareCheckpointBlobName')]"
+          }
+        },
+        "variables": {
+          "bootstrapWatermark": {
+            "type": "String",
+            "defaultValue": "[parameters('bootstrapWatermark')]"
+          },
+          "runWindowStartUtc": {
+            "type": "String"
+          },
+          "runWindowEndUtc": {
+            "type": "String"
+          }
+        },
         "activities": [
+          {
+            "name": "SetRunWindowEnd",
+            "type": "SetVariable",
+            "dependsOn": [],
+            "typeProperties": {
+              "variableName": "runWindowEndUtc",
+              "value": {
+                "value": "@utcNow()",
+                "type": "Expression"
+              }
+            }
+          },
+          {
+            "name": "ReadCheckpoint",
+            "type": "Lookup",
+            "dependsOn": [
+              {
+                "activity": "SetRunWindowEnd",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "policy": {
+              "timeout": "0.00:05:00",
+              "retry": 1,
+              "retryIntervalInSeconds": 30
+            },
+            "typeProperties": {
+              "dataset": {
+                "referenceName": "fileshare_checkpoint",
+                "type": "DatasetReference"
+              },
+              "firstRowOnly": true
+            }
+          },
+          {
+            "name": "SetWindowStart",
+            "type": "SetVariable",
+            "dependsOn": [
+              {
+                "activity": "ReadCheckpoint",
+                "dependencyConditions": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped"
+                ]
+              }
+            ],
+            "typeProperties": {
+              "variableName": "runWindowStartUtc",
+              "value": {
+                "value": "@if(or(empty(activity('ReadCheckpoint').output), empty(activity('ReadCheckpoint').output.firstRow), empty(activity('ReadCheckpoint').output.firstRow.lastSuccessfulWatermarkUtc)), variables('bootstrapWatermark'), activity('ReadCheckpoint').output.firstRow.lastSuccessfulWatermarkUtc)",
+                "type": "Expression"
+              }
+            }
+          },
           {
             "name": "CopyFiles",
             "type": "Copy",
-            "dependsOn": [],
+            "dependsOn": [
+              {
+                "activity": "SetWindowStart",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
             "policy": {
               "timeout": "7.00:00:00",
               "retry": 0
@@ -233,27 +500,92 @@
             "typeProperties": {
               "source": {
                 "type": "FileSystemSource",
-                "recursive": true
+                "recursive": true,
+                "modifiedDatetimeStart": {
+                  "value": "@addSeconds(variables('runWindowStartUtc'), -30)",
+                  "type": "Expression"
+                },
+                "modifiedDatetimeEnd": {
+                  "value": "@variables('runWindowEndUtc')",
+                  "type": "Expression"
+                }
               },
               "sink": {
                 "type": "FileSystemSink",
                 "copyBehavior": "PreserveHierarchy"
               },
               "enableStaging": false,
-              "validateDataConsistency": false
+              "validateDataConsistency": false,
+              "logSettings": {
+                "enableCopyActivityLog": true,
+                "copyActivityLogSettings": {
+                  "logLevel": "Warning",
+                  "enableReliableLogging": false
+                },
+                "logLocationSettings": {
+                  "linkedServiceName": {
+                    "referenceName": "checkpoint_storage",
+                    "type": "LinkedServiceReference"
+                  },
+                  "path": "[concat(parameters('checkpointContainerName'), '/', parameters('checkpointJournalPrefix'), '/copyfilesharepipeline/logs')]"
+                }
+              },
+              "skipErrorFile": {
+                "fileMissing": true
+              }
             },
             "inputs": [
               {
-                "referenceName": "source-fileshare",
+                "referenceName": "source_fileshare",
                 "type": "DatasetReference"
               }
             ],
             "outputs": [
               {
-                "referenceName": "dest-fileshare",
+                "referenceName": "dest_fileshare",
                 "type": "DatasetReference"
               }
             ]
+          },
+          {
+            "name": "WriteCheckpoint",
+            "type": "WebActivity",
+            "dependsOn": [
+              {
+                "activity": "CopyFiles",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "connectVia": {
+              "referenceName": "adf-managed-ir",
+              "type": "IntegrationRuntimeReference"
+            },
+            "policy": {
+              "retry": 3,
+              "retryIntervalInSeconds": 30
+            },
+            "typeProperties": {
+              "method": "PUT",
+              "url": {
+                "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareCheckpointBlobName)",
+                "type": "Expression"
+              },
+              "headers": {
+                "x-ms-blob-type": "BlockBlob",
+                "x-ms-version": "2023-11-03",
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "value": "@concat('{', '\"schemaVersion\":\"1\",', '\"pipelineName\":\"copyfilesharepipeline\",', '\"lastSuccessfulWatermarkUtc\":\"', variables('runWindowEndUtc'), '\",', '\"lastRunId\":\"', pipeline().RunId, '\",', '\"lastRunStatus\":\"succeeded\",', '\"lastRunEndedUtc\":\"', utcNow(), '\"', '}')",
+                "type": "Expression"
+              },
+              "authentication": {
+                "type": "MSI",
+                "resource": "https://storage.azure.com/"
+              }
+            }
           }
         ]
       }
@@ -263,15 +595,111 @@
       "apiVersion": "2018-06-01",
       "name": "[concat(parameters('factoryName'), '/copydatalakegen2pipeline')]",
       "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source-datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest-datalake')]"
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_datalake')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_datalake')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/datalake_checkpoint')]"
       ],
       "properties": {
+        "concurrency": 1,
+        "parameters": {
+          "checkpointStorageAccountName": {
+            "type": "String",
+            "defaultValue": "[parameters('checkpointStorageAccountName')]"
+          },
+          "checkpointContainerName": {
+            "type": "String",
+            "defaultValue": "[parameters('checkpointContainerName')]"
+          },
+          "checkpointCurrentPrefix": {
+            "type": "String",
+            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
+          },
+          "datalakeCheckpointBlobName": {
+            "type": "String",
+            "defaultValue": "[parameters('datalakeCheckpointBlobName')]"
+          }
+        },
+        "variables": {
+          "bootstrapWatermark": {
+            "type": "String",
+            "defaultValue": "[parameters('bootstrapWatermark')]"
+          },
+          "runWindowStartUtc": {
+            "type": "String"
+          },
+          "runWindowEndUtc": {
+            "type": "String"
+          }
+        },
         "activities": [
+          {
+            "name": "SetRunWindowEnd",
+            "type": "SetVariable",
+            "dependsOn": [],
+            "typeProperties": {
+              "variableName": "runWindowEndUtc",
+              "value": {
+                "value": "@utcNow()",
+                "type": "Expression"
+              }
+            }
+          },
+          {
+            "name": "ReadCheckpoint",
+            "type": "Lookup",
+            "dependsOn": [
+              {
+                "activity": "SetRunWindowEnd",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "policy": {
+              "timeout": "0.00:05:00",
+              "retry": 1,
+              "retryIntervalInSeconds": 30
+            },
+            "typeProperties": {
+              "dataset": {
+                "referenceName": "datalake_checkpoint",
+                "type": "DatasetReference"
+              },
+              "firstRowOnly": true
+            }
+          },
+          {
+            "name": "SetWindowStart",
+            "type": "SetVariable",
+            "dependsOn": [
+              {
+                "activity": "ReadCheckpoint",
+                "dependencyConditions": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped"
+                ]
+              }
+            ],
+            "typeProperties": {
+              "variableName": "runWindowStartUtc",
+              "value": {
+                "value": "@if(or(empty(activity('ReadCheckpoint').output), empty(activity('ReadCheckpoint').output.firstRow), empty(activity('ReadCheckpoint').output.firstRow.lastSuccessfulWatermarkUtc)), variables('bootstrapWatermark'), activity('ReadCheckpoint').output.firstRow.lastSuccessfulWatermarkUtc)",
+                "type": "Expression"
+              }
+            }
+          },
           {
             "name": "CopyDataLakeGen2",
             "type": "Copy",
-            "dependsOn": [],
+            "dependsOn": [
+              {
+                "activity": "SetWindowStart",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
             "policy": {
               "timeout": "7.00:00:00",
               "retry": 0
@@ -279,26 +707,357 @@
             "typeProperties": {
               "source": {
                 "type": "AzureBlobFSSource",
-                "recursive": true
+                "recursive": true,
+                "modifiedDatetimeStart": {
+                  "value": "@addSeconds(variables('runWindowStartUtc'), -30)",
+                  "type": "Expression"
+                },
+                "modifiedDatetimeEnd": {
+                  "value": "@variables('runWindowEndUtc')",
+                  "type": "Expression"
+                }
               },
               "sink": {
                 "type": "AzureBlobFSSink",
                 "copyBehavior": "PreserveHierarchy"
               },
-              "enableStaging": false
+              "enableStaging": false,
+              "logSettings": {
+                "enableCopyActivityLog": true,
+                "copyActivityLogSettings": {
+                  "logLevel": "Warning",
+                  "enableReliableLogging": false
+                },
+                "logLocationSettings": {
+                  "linkedServiceName": {
+                    "referenceName": "checkpoint_storage",
+                    "type": "LinkedServiceReference"
+                  },
+                  "path": "[concat(parameters('checkpointContainerName'), '/', parameters('checkpointJournalPrefix'), '/copydatalakegen2pipeline/logs')]"
+                }
+              },
+              "skipErrorFile": {
+                "fileMissing": true
+              }
             },
             "inputs": [
               {
-                "referenceName": "source-datalake",
+                "referenceName": "source_datalake",
                 "type": "DatasetReference"
               }
             ],
             "outputs": [
               {
-                "referenceName": "dest-datalake",
+                "referenceName": "dest_datalake",
                 "type": "DatasetReference"
               }
             ]
+          },
+          {
+            "name": "WriteCheckpoint",
+            "type": "WebActivity",
+            "dependsOn": [
+              {
+                "activity": "CopyDataLakeGen2",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "connectVia": {
+              "referenceName": "adf-managed-ir",
+              "type": "IntegrationRuntimeReference"
+            },
+            "policy": {
+              "retry": 3,
+              "retryIntervalInSeconds": 30
+            },
+            "typeProperties": {
+              "method": "PUT",
+              "url": {
+                "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeCheckpointBlobName)",
+                "type": "Expression"
+              },
+              "headers": {
+                "x-ms-blob-type": "BlockBlob",
+                "x-ms-version": "2023-11-03",
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "value": "@concat('{', '\"schemaVersion\":\"1\",', '\"pipelineName\":\"copydatalakegen2pipeline\",', '\"lastSuccessfulWatermarkUtc\":\"', variables('runWindowEndUtc'), '\",', '\"lastRunId\":\"', pipeline().RunId, '\",', '\"lastRunStatus\":\"succeeded\",', '\"lastRunEndedUtc\":\"', utcNow(), '\"', '}')",
+                "type": "Expression"
+              },
+              "authentication": {
+                "type": "MSI",
+                "resource": "https://storage.azure.com/"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/pipelines",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/deletereconcilefilesharepipeline')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_fileshare')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_fileshare')]"
+      ],
+      "properties": {
+        "concurrency": 1,
+        "variables": {
+          "deleteCount": {
+            "type": "Integer",
+            "defaultValue": 0
+          }
+        },
+        "activities": [
+          {
+            "name": "SnapshotSourceList",
+            "type": "GetMetadata",
+            "dependsOn": [],
+            "typeProperties": {
+              "dataset": {
+                "referenceName": "source_fileshare",
+                "type": "DatasetReference"
+              },
+              "fieldList": [
+                "childItems"
+              ]
+            }
+          },
+          {
+            "name": "SnapshotDestList",
+            "type": "GetMetadata",
+            "dependsOn": [
+              {
+                "activity": "SnapshotSourceList",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "typeProperties": {
+              "dataset": {
+                "referenceName": "dest_fileshare",
+                "type": "DatasetReference"
+              },
+              "fieldList": [
+                "childItems"
+              ]
+            }
+          },
+          {
+            "name": "ReconcileDeletes",
+            "type": "ForEach",
+            "dependsOn": [
+              {
+                "activity": "SnapshotDestList",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "typeProperties": {
+              "isSequential": true,
+              "items": {
+                "value": "@activity('SnapshotDestList').output.childItems",
+                "type": "Expression"
+              },
+              "activities": [
+                {
+                  "name": "DeleteIfMissingInSource",
+                  "type": "IfCondition",
+                  "typeProperties": {
+                    "expression": {
+                      "value": "@and(not(contains(string(activity('SnapshotSourceList').output.childItems), concat('\"name\":\"', item().name, '\"'))), less(variables('deleteCount'), 500))",
+                      "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                      {
+                        "name": "DeleteDestinationItem",
+                        "type": "Delete",
+                        "policy": {
+                          "retry": 2,
+                          "retryIntervalInSeconds": 30
+                        },
+                        "typeProperties": {
+                          "dataset": {
+                            "referenceName": "dest_fileshare",
+                            "type": "DatasetReference",
+                            "parameters": {
+                              "folderPath": "/",
+                              "fileName": {
+                                "value": "@item().name",
+                                "type": "Expression"
+                              }
+                            }
+                          },
+                          "storeSettings": {
+                            "type": "AzureFileStorageReadSettings",
+                            "recursive": false
+                          },
+                          "enableLogging": false
+                        }
+                      },
+                      {
+                        "name": "IncrementDeleteCount",
+                        "type": "SetVariable",
+                        "dependsOn": [
+                          {
+                            "activity": "DeleteDestinationItem",
+                            "dependencyConditions": [
+                              "Succeeded"
+                            ]
+                          }
+                        ],
+                        "typeProperties": {
+                          "variableName": "deleteCount",
+                          "value": {
+                            "value": "@add(variables('deleteCount'), 1)",
+                            "type": "Expression"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/pipelines",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/deletereconciledalakepipeline')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_datalake')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_datalake')]"
+      ],
+      "properties": {
+        "concurrency": 1,
+        "variables": {
+          "deleteCount": {
+            "type": "Integer",
+            "defaultValue": 0
+          }
+        },
+        "activities": [
+          {
+            "name": "SnapshotSourceList",
+            "type": "GetMetadata",
+            "dependsOn": [],
+            "typeProperties": {
+              "dataset": {
+                "referenceName": "source_datalake",
+                "type": "DatasetReference"
+              },
+              "fieldList": [
+                "childItems"
+              ]
+            }
+          },
+          {
+            "name": "SnapshotDestList",
+            "type": "GetMetadata",
+            "dependsOn": [
+              {
+                "activity": "SnapshotSourceList",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "typeProperties": {
+              "dataset": {
+                "referenceName": "dest_datalake",
+                "type": "DatasetReference"
+              },
+              "fieldList": [
+                "childItems"
+              ]
+            }
+          },
+          {
+            "name": "ReconcileDeletes",
+            "type": "ForEach",
+            "dependsOn": [
+              {
+                "activity": "SnapshotDestList",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "typeProperties": {
+              "isSequential": true,
+              "items": {
+                "value": "@activity('SnapshotDestList').output.childItems",
+                "type": "Expression"
+              },
+              "activities": [
+                {
+                  "name": "DeleteIfMissingInSource",
+                  "type": "IfCondition",
+                  "typeProperties": {
+                    "expression": {
+                      "value": "@and(not(contains(string(activity('SnapshotSourceList').output.childItems), concat('\"name\":\"', item().name, '\"'))), less(variables('deleteCount'), 500))",
+                      "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                      {
+                        "name": "DeleteDestinationItem",
+                        "type": "Delete",
+                        "policy": {
+                          "retry": 2,
+                          "retryIntervalInSeconds": 30
+                        },
+                        "typeProperties": {
+                          "dataset": {
+                            "referenceName": "dest_datalake",
+                            "type": "DatasetReference",
+                            "parameters": {
+                              "folderPath": "[parameters('destDatalakeFilesystem')]",
+                              "fileName": {
+                                "value": "@item().name",
+                                "type": "Expression"
+                              }
+                            }
+                          },
+                          "storeSettings": {
+                            "type": "AzureBlobFSReadSettings",
+                            "recursive": false
+                          },
+                          "enableLogging": false
+                        }
+                      },
+                      {
+                        "name": "IncrementDeleteCount",
+                        "type": "SetVariable",
+                        "dependsOn": [
+                          {
+                            "activity": "DeleteDestinationItem",
+                            "dependencyConditions": [
+                              "Succeeded"
+                            ]
+                          }
+                        ],
+                        "typeProperties": {
+                          "variableName": "deleteCount",
+                          "value": {
+                            "value": "@add(variables('deleteCount'), 1)",
+                            "type": "Expression"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
           }
         ]
       }
@@ -349,6 +1108,64 @@
           {
             "pipelineReference": {
               "referenceName": "copydatalakegen2pipeline",
+              "type": "PipelineReference"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/triggers",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/deletereconcilefilesharetrigger')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/deletereconcilefilesharepipeline')]"
+      ],
+      "properties": {
+        "type": "ScheduleTrigger",
+        "typeProperties": {
+          "recurrence": {
+            "frequency": "Day",
+            "interval": 1,
+            "startTime": "[parameters('deleteReconcileTriggerStartTime')]",
+            "schedule": {
+              "hours": "[json(parameters('deleteReconcileScheduleHours'))]"
+            }
+          }
+        },
+        "pipelines": [
+          {
+            "pipelineReference": {
+              "referenceName": "deletereconcilefilesharepipeline",
+              "type": "PipelineReference"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/triggers",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/deletereconciledalakegen2trigger')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/deletereconciledalakepipeline')]"
+      ],
+      "properties": {
+        "type": "ScheduleTrigger",
+        "typeProperties": {
+          "recurrence": {
+            "frequency": "Day",
+            "interval": 1,
+            "startTime": "[parameters('deleteReconcileTriggerStartTime')]",
+            "schedule": {
+              "hours": "[json(parameters('deleteReconcileScheduleHours'))]"
+            }
+          }
+        },
+        "pipelines": [
+          {
+            "pipelineReference": {
+              "referenceName": "deletereconciledalakepipeline",
               "type": "PipelineReference"
             }
           }

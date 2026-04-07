@@ -10,6 +10,7 @@ TF_DIR="$REPO_ROOT/terraform"
 TFVARS_FILE="demo.tfvars"
 AUTO_APPROVE=true
 DRY_RUN=false
+PRESERVE_CHECKPOINT_AUDIT=true
 
 # shellcheck source=lib/storage-network-access.sh
 source "$SCRIPT_DIR/lib/storage-network-access.sh"
@@ -509,6 +510,10 @@ Options:
   -f, --tfvars FILE      Terraform var-file name under terraform/ (default: demo.tfvars)
   --no-auto-approve      Disable -auto-approve in terraform destroy calls
   --dry-run              Print actions without executing
+  --preserve-checkpoint-audit
+                          Keep checkpoint audit artifacts when immutability mode is strict-regulated (default: true)
+  --no-preserve-checkpoint-audit
+                          Force teardown attempt of checkpoint audit artifacts (demo-regulated mode expectation)
   -h, --help             Show this help
 
 What this keeps:
@@ -535,6 +540,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run)
       DRY_RUN=true
+      shift
+      ;;
+    --preserve-checkpoint-audit)
+      PRESERVE_CHECKPOINT_AUDIT=true
+      shift
+      ;;
+    --no-preserve-checkpoint-audit)
+      PRESERVE_CHECKPOINT_AUDIT=false
       shift
       ;;
     -h|--help)
@@ -579,6 +592,48 @@ fi
 
 tf() {
   terraform -chdir="$TF_DIR" "$@"
+}
+
+pre_destroy_checkpoint_governance_cleanup() {
+  local checkpoint_storage checkpoint_container immutability_mode
+  local canada_rg
+
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "[DRY RUN] Checking/removing checkpoint immutability policy prior to destroy (demo-regulated mode)."
+    return 0
+  fi
+
+  checkpoint_storage="$(tf_output_or_tfvar canadaeast_checkpoint_storage_name canadaeast_checkpoint_storage_name || true)"
+  checkpoint_container="$(tf_output_or_tfvar adf_checkpoint_container_name adf_checkpoint_container_name || true)"
+  immutability_mode="$(tfvar_string adf_checkpoint_immutability_mode || true)"
+  canada_rg="$(tf_output_or_tfvar canadaeast_rg_name canadaeast_rg_name || true)"
+
+  if [[ -z "$immutability_mode" ]]; then
+    immutability_mode="demo-regulated"
+  fi
+
+  if [[ "$immutability_mode" == "strict-regulated" && "$PRESERVE_CHECKPOINT_AUDIT" == true ]]; then
+    echo "[INFO] strict-regulated mode with preserve flag enabled; skipping checkpoint immutability removal."
+    return 0
+  fi
+
+  if [[ -z "$checkpoint_storage" || -z "$checkpoint_container" || -z "$canada_rg" ]]; then
+    echo "[WARN] Checkpoint storage/container not configured; skipping immutability cleanup."
+    return 0
+  fi
+
+  if ! az storage account show --name "$checkpoint_storage" --resource-group "$canada_rg" >/dev/null 2>&1; then
+    echo "[INFO] Checkpoint storage account '${checkpoint_storage}' not found; skipping immutability cleanup."
+    return 0
+  fi
+
+  echo "[INFO] Attempting checkpoint immutability cleanup on ${checkpoint_storage}/${checkpoint_container}..."
+
+  az storage container immutability-policy delete \
+    --account-name "$checkpoint_storage" \
+    --container-name "$checkpoint_container" \
+    --if-match '*' \
+    --auth-mode login >/dev/null 2>&1 || true
 }
 
 destroy_phase56() {
@@ -642,6 +697,7 @@ bootstrap_acl_access
 purge_soft_deleted_cmk_keys
 remove_stale_cmk_bindings_from_state
 delete_adf_foundation
+pre_destroy_checkpoint_governance_cleanup
 
 destroy_phase56
 destroy_phase4_and_phase3

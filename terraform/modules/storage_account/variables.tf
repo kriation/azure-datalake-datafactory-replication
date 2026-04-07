@@ -24,3 +24,21 @@ variable "public_network_access_enabled" {
   type        = bool
   default     = false
 }
+
+variable "soft_delete_days" {
+  description = "Blob soft-delete retention in days. Set to 0 to disable."
+  type        = number
+  default     = 0
+}
+
+variable "versioning_enabled" {
+  description = "Enable blob versioning."
+  type        = bool
+  default     = false
+}
+
+variable "change_feed_enabled" {
+  description = "Enable blob change feed for audit traceability."
+  type        = bool
+  default     = false
+}

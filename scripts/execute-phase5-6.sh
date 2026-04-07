@@ -8,12 +8,13 @@ set -euo pipefail
 #   Safe, single-command execution of Phase 5-6 hardening:
 #   1. Bootstrap: Enable temporary network access from caller IP using lib functions
 #   2. Apply: Run terraform apply to create all Phase 5-6 resources
-#   3. Validate: Verify all resources deployed successfully
-#   4. Lockdown: Automatic via EXIT trap (restores network ACLs to disabled state)
+#   3. Seed: Initialize checkpoint blobs for first-run incremental pipelines
+#   4. Validate: Verify all resources deployed successfully
+#   5. Lockdown: Automatic via EXIT trap (restores network ACLs to disabled state)
 #
 # Pattern:
-#   Uses scripts/lib/keyvault-network-access.sh helper functions for robust,
-#   temporary Key Vault public access with propagation waiting.
+#   Uses scripts/lib/keyvault-network-access.sh and scripts/lib/storage-network-access.sh
+#   helper functions for robust temporary network access with propagation waiting.
 #   Exit trap automatically restores all opened resources; safe for errors/interruptions.
 #
 # Usage:
@@ -40,25 +41,8 @@ SKIP_CLEANUP=false
 
 # shellcheck source=lib/keyvault-network-access.sh
 source "$SCRIPT_DIR/lib/keyvault-network-access.sh"
-
-# Fallback: keyvault-network-access.sh expects BOOTSTRAP_CIDR to be set,
-# but bootstrap CIDR detection lives in storage helper scripts. Keep this
-# local helper so this script does not depend on storage libraries.
-detect_bootstrap_cidr() {
-  if [[ -n "${BOOTSTRAP_CIDR:-}" ]]; then
-    return
-  fi
-
-  local public_ip
-  public_ip="$(curl -fsSL https://api.ipify.org)"
-
-  if [[ -z "$public_ip" ]]; then
-    echo "Error: unable to determine the current public IP for network bootstrap."
-    exit 1
-  fi
-
-  BOOTSTRAP_CIDR="${public_ip}/32"
-}
+# shellcheck source=lib/storage-network-access.sh
+source "$SCRIPT_DIR/lib/storage-network-access.sh"
 
 ###############################################################################
 # Helper Functions
@@ -108,7 +92,7 @@ import_if_exists() {
 }
 
 phase_reconcile_existing_kv_resources() {
-  log_section "PHASE 2/5: Reconcile Existing Key Vault Data-Plane Resources"
+  log_section "PHASE 2/6: Reconcile Existing Key Vault Data-Plane Resources"
 
   if [[ ! -d "$TERRAFORM_DIR" ]]; then
     log_error "Terraform directory not found: $TERRAFORM_DIR"
@@ -164,7 +148,7 @@ phase_reconcile_existing_kv_resources() {
 ###############################################################################
 
 phase_bootstrap() {
-  log_section "PHASE 1/4: Bootstrap Network Access"
+  log_section "PHASE 1/6: Bootstrap Network Access"
   
   log_info "Detecting caller IP and enabling temporary public access..."
   
@@ -206,12 +190,13 @@ phase_cleanup() {
   
   log_info "Restoring network ACLs to Disabled state..."
   close_all_key_vault_access
+  close_all_storage_access
   
   log_success "Network lockdown restored - Phase 4 security posture maintained"
 }
 
 phase_apply() {
-  log_section "PHASE 3/5: Terraform Apply Phase 5-6 Resources"
+  log_section "PHASE 3/6: Terraform Apply Phase 5-6 Resources"
   
   if [[ ! -d "$TERRAFORM_DIR" ]]; then
     log_error "Terraform directory not found: $TERRAFORM_DIR"
@@ -318,8 +303,85 @@ phase_ensure_adf_artifacts() {
   return 3
 }
 
+phase_seed_initial_checkpoints() {
+  log_section "PHASE 5/6: Seed Initial Checkpoints"
+
+  if [[ ! -d "$TERRAFORM_DIR" ]]; then
+    log_error "Terraform directory not found: $TERRAFORM_DIR"
+    return 2
+  fi
+
+  if [[ $DRY_RUN == true ]]; then
+    log_info "[DRY RUN] Would seed initial checkpoint blobs if they do not exist"
+    return 0
+  fi
+
+  cd "$TERRAFORM_DIR"
+
+  local checkpoint_rg
+  local checkpoint_storage
+  local checkpoint_container
+  local checkpoint_current_prefix
+  local fileshare_checkpoint_blob
+  local datalake_checkpoint_blob
+  local bootstrap_watermark
+  local account_key
+
+  checkpoint_rg="$(terraform output -raw canadaeast_rg_name)"
+  checkpoint_storage="$(terraform console -var-file=demo.tfvars <<< 'var.canadaeast_checkpoint_storage_name' | tr -d '"')"
+  checkpoint_container="$(terraform console -var-file=demo.tfvars <<< 'var.adf_checkpoint_container_name' | tr -d '"')"
+  checkpoint_current_prefix="$(terraform console -var-file=demo.tfvars <<< 'var.adf_checkpoint_current_prefix' | tr -d '"')"
+  fileshare_checkpoint_blob="$(terraform console -var-file=demo.tfvars <<< 'var.adf_fileshare_checkpoint_blob_name' | tr -d '"')"
+  datalake_checkpoint_blob="$(terraform console -var-file=demo.tfvars <<< 'var.adf_datalake_checkpoint_blob_name' | tr -d '"')"
+  bootstrap_watermark="$(terraform console -var-file=demo.tfvars <<< 'var.adf_incremental_bootstrap_watermark' | tr -d '"')"
+
+  detect_bootstrap_cidr
+  open_storage_account_access "$checkpoint_storage" "$checkpoint_rg"
+
+  account_key="$(az storage account keys list --resource-group "$checkpoint_rg" --account-name "$checkpoint_storage" --query "[0].value" -o tsv)"
+  if [[ -z "$account_key" ]]; then
+    log_error "Unable to retrieve storage account key for checkpoint seeding"
+    return 4
+  fi
+
+  seed_checkpoint_blob() {
+    local blob_name="$1"
+    local pipeline_name="$2"
+    local blob_path="${checkpoint_current_prefix}/${blob_name}"
+    local blob_exists
+    local temp_file
+
+    blob_exists="$(az storage blob exists --account-name "$checkpoint_storage" --account-key "$account_key" --container-name "$checkpoint_container" --name "$blob_path" --query exists -o tsv)"
+    if [[ "$blob_exists" == "true" ]]; then
+      log_info "Checkpoint already exists; leaving unchanged: ${blob_path}"
+      return 0
+    fi
+
+    temp_file="$(mktemp)"
+    printf '[{"schemaVersion":"1","pipelineName":"%s","lastSuccessfulWatermarkUtc":"%s","lastRunId":"bootstrap","lastRunStatus":"seeded","lastRunEndedUtc":"%s"}]' "$pipeline_name" "$bootstrap_watermark" "$bootstrap_watermark" > "$temp_file"
+
+    az storage blob upload \
+      --account-name "$checkpoint_storage" \
+      --account-key "$account_key" \
+      --container-name "$checkpoint_container" \
+      --name "$blob_path" \
+      --file "$temp_file" \
+      --overwrite false \
+      --only-show-errors >/dev/null
+
+    rm -f "$temp_file"
+    log_success "Seeded checkpoint blob: ${blob_path}"
+  }
+
+  seed_checkpoint_blob "$fileshare_checkpoint_blob" "copyfilesharepipeline"
+  seed_checkpoint_blob "$datalake_checkpoint_blob" "copydatalakegen2pipeline"
+  close_storage_account_access "$checkpoint_storage" "$checkpoint_rg"
+
+  log_success "Checkpoint seeding complete"
+}
+
 phase_validate() {
-  log_section "PHASE 5/6: Validation"
+  log_section "PHASE 6/6: Validation"
   
   log_info "Validating Phase 5-6 resources..."
   
@@ -445,8 +507,9 @@ Description:
   2. Reconcile: Import pre-existing KV keys/secrets into Terraform state (idempotent reruns)
   3. Apply: Terraform apply for CMK, secrets, ADF
   4. Ensure: Force ADF ARM deployment if pipelines/triggers are missing
-  5. Validate: Verify all resources created successfully
-  6. Cleanup: EXIT trap automatically restores network lockdown (unless --no-cleanup)
+  5. Seed: Create initial checkpoint blobs when missing (first-run safety)
+  6. Validate: Verify all resources created successfully
+  7. Cleanup: EXIT trap automatically restores network lockdown (unless --no-cleanup)
 
 Exit Codes:
   0 - Success
@@ -454,7 +517,8 @@ Exit Codes:
   2 - Reconcile/import failed
   3 - Terraform apply failed
   4 - ADF artifact remediation failed
-  5 - Validation failed
+  5 - Checkpoint seeding failed
+  6 - Validation failed
 
 Examples:
   ./execute-phase5-6.sh                # Full workflow (auto-cleanup via EXIT trap)
@@ -519,9 +583,14 @@ main() {
     exit 4
   fi
 
-  if ! phase_validate; then
+  if ! phase_seed_initial_checkpoints; then
     log_error "Phase 5 failed (EXIT trap will restore network lockdown)"
     exit 5
+  fi
+
+  if ! phase_validate; then
+    log_error "Phase 6 failed (EXIT trap will restore network lockdown)"
+    exit 6
   fi
   
   log_section "✓ Phase 5-6 Complete"
@@ -531,6 +600,7 @@ main() {
   echo "  ✓ CMK bindings applied to storage and datalake"
   echo "  ✓ KV secrets created for ADF connection strings"
   echo "  ✓ Data Factory deployed with pipelines and triggers"
+  echo "  ✓ Initial checkpoint blobs seeded (if missing) for first-run safety"
   echo "  ✓ Network ACLs restored to Disabled (Phase 4 lockdown maintained automatically)"
   echo ""
   echo "Next steps:"

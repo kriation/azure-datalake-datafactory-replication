@@ -51,6 +51,8 @@ cd ../scripts
 ./execute-phase5-6.sh
 ```
 
+This script also seeds missing checkpoint blobs for first-run safety.
+
 4. Approve managed private endpoints.
 
 ```bash

@@ -63,3 +63,65 @@ variable "data_factory_principal_id" {
   description = "Principal ID of the Data Factory managed identity"
   type        = string
 }
+
+# ---------------------------------------------------------------------------
+# Incremental sync checkpoint variables
+# ---------------------------------------------------------------------------
+
+variable "checkpoint_storage_account_name" {
+  description = "Name of the dedicated checkpoint storage account."
+  type        = string
+}
+
+variable "checkpoint_storage_account_id" {
+  description = "Resource ID of the dedicated checkpoint storage account."
+  type        = string
+}
+
+variable "adf_checkpoint_container_name" {
+  description = "Blob container name within the checkpoint storage account."
+  type        = string
+  default     = "adf-checkpoints"
+}
+
+variable "adf_checkpoint_current_prefix" {
+  description = "Path prefix for mutable runtime checkpoint head blobs."
+  type        = string
+  default     = "current"
+}
+
+variable "adf_checkpoint_journal_prefix" {
+  description = "Path prefix for immutable audit journal entries."
+  type        = string
+  default     = "journal"
+}
+
+variable "adf_fileshare_checkpoint_blob_name" {
+  description = "Blob name for the file share sync state checkpoint."
+  type        = string
+  default     = "fileshare-sync-state.json"
+}
+
+variable "adf_datalake_checkpoint_blob_name" {
+  description = "Blob name for the Data Lake Gen2 sync state checkpoint."
+  type        = string
+  default     = "datalake-sync-state.json"
+}
+
+variable "adf_incremental_bootstrap_watermark" {
+  description = "Fallback watermark for first pipeline run when no checkpoint exists."
+  type        = string
+  default     = "1970-01-01T00:00:00Z"
+}
+
+variable "adf_delete_reconcile_schedule_hours" {
+  description = "UTC hours at which the delete-reconciliation triggers fire each day."
+  type        = list(number)
+  default     = [6, 18]
+}
+
+variable "adf_delete_reconcile_trigger_start_time" {
+  description = "ISO-8601 start time for delete-reconciliation ScheduleTriggers."
+  type        = string
+  default     = "2026-04-01T06:00:00Z"
+}

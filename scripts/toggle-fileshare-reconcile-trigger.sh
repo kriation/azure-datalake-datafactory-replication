@@ -6,7 +6,7 @@ set -e
 
 RESOURCE_GROUP="rg-demo-canadaeast"
 DATA_FACTORY="dfdemocanadaeast"
-TRIGGER="DeleteReconcileFileShareTrigger"
+TRIGGER="deletereconcilefilesharetrigger"
 
 if [[ "$1" == "start" ]]; then
   az datafactory trigger start \

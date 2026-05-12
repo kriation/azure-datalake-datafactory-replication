@@ -128,10 +128,10 @@ echo "[INFO] Lookback window: ${HOURS}h ($START_UTC to $END_UTC)"
 echo "[INFO] Pipelines: $PIPELINES_CSV"
 
 declare -A TRIGGER_CANDIDATES_BY_PIPELINE=(
-  [copyfilesharepipeline]="copyfilesharetrigger CopyFileShareTrigger"
-  [copydatalakegen2pipeline]="copydatalakegen2trigger CopyDataLakeGen2Trigger"
-  [deletereconcilefilesharepipeline]="deletereconcilefilesharetrigger DeleteReconcileFileShareTrigger"
-  [deletereconciledalakepipeline]="deletereconciledalakegen2trigger DeleteReconcileDataLakeGen2Trigger"
+  [copyfilesharepipeline]="copyfilesharetrigger"
+  [copydatalakegen2pipeline]="copydatalakegen2trigger"
+  [deletereconcilefilesharepipeline]="deletereconcilefilesharetrigger"
+  [deletereconciledalakepipeline]="deletereconciledalakegen2trigger"
 )
 
 if [[ "$CHECK_TRIGGERS" == true ]]; then

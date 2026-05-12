@@ -6,7 +6,7 @@ set -e
 
 RESOURCE_GROUP="rg-demo-canadaeast"
 DATA_FACTORY="dfdemocanadaeast"
-TRIGGER="DeleteReconcileDataLakeGen2Trigger"
+TRIGGER="deletereconciledalakegen2trigger"
 
 if [[ "$1" == "start" ]]; then
   az datafactory trigger start \

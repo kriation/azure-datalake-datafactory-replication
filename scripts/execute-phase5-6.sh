@@ -263,6 +263,17 @@ phase_ensure_adf_artifacts() {
   local dest_dl_account
   local source_dl_filesystem
   local dest_dl_filesystem
+  local checkpoint_rg
+  local checkpoint_storage
+  local checkpoint_storage_resource_id
+  local checkpoint_container
+  local checkpoint_current_prefix
+  local checkpoint_journal_prefix
+  local fileshare_checkpoint_blob
+  local datalake_checkpoint_blob
+  local bootstrap_watermark
+  local delete_reconcile_schedule_hours
+  local delete_reconcile_trigger_start_time
 
   keyvault_uri="$(terraform output -raw canadaeast_key_vault_uri)"
   subscription_id="$(az account show --query id -o tsv)"
@@ -272,6 +283,17 @@ phase_ensure_adf_artifacts() {
   dest_dl_account="$(terraform output -raw canadaeast_datalake_storage_name)"
   source_dl_filesystem="$(terraform output -raw eastus2_datalake_filesystem_name)"
   dest_dl_filesystem="$(terraform output -raw canadaeast_datalake_filesystem_name)"
+  checkpoint_rg="$(terraform output -raw canadaeast_rg_name)"
+  checkpoint_storage="$(terraform console -var-file=demo.tfvars <<< 'var.canadaeast_checkpoint_storage_name' | tr -d '"')"
+  checkpoint_storage_resource_id="/subscriptions/$subscription_id/resourceGroups/$checkpoint_rg/providers/Microsoft.Storage/storageAccounts/$checkpoint_storage"
+  checkpoint_container="$(terraform console -var-file=demo.tfvars <<< 'var.adf_checkpoint_container_name' | tr -d '"')"
+  checkpoint_current_prefix="$(terraform console -var-file=demo.tfvars <<< 'var.adf_checkpoint_current_prefix' | tr -d '"')"
+  checkpoint_journal_prefix="$(terraform console -var-file=demo.tfvars <<< 'var.adf_checkpoint_journal_prefix' | tr -d '"')"
+  fileshare_checkpoint_blob="$(terraform console -var-file=demo.tfvars <<< 'var.adf_fileshare_checkpoint_blob_name' | tr -d '"')"
+  datalake_checkpoint_blob="$(terraform console -var-file=demo.tfvars <<< 'var.adf_datalake_checkpoint_blob_name' | tr -d '"')"
+  bootstrap_watermark="$(terraform console -var-file=demo.tfvars <<< 'var.adf_incremental_bootstrap_watermark' | tr -d '"')"
+  delete_reconcile_schedule_hours="$(terraform console -var-file=demo.tfvars <<< 'jsonencode(var.adf_delete_reconcile_schedule_hours)' | tr -d '"')"
+  delete_reconcile_trigger_start_time="$(terraform console -var-file=demo.tfvars <<< 'var.adf_delete_reconcile_trigger_start_time' | tr -d '"')"
 
   az deployment group create \
     --resource-group "$rg" \
@@ -285,6 +307,16 @@ phase_ensure_adf_artifacts() {
       destFileshareAccountName="$dest_fs_account" \
       sourceFileshareStorageResourceId="/subscriptions/$subscription_id/resourceGroups/rg-demo-eastus2/providers/Microsoft.Storage/storageAccounts/$source_fs_account" \
       destFileshareStorageResourceId="/subscriptions/$subscription_id/resourceGroups/rg-demo-canadaeast/providers/Microsoft.Storage/storageAccounts/$dest_fs_account" \
+      checkpointStorageAccountName="$checkpoint_storage" \
+      checkpointStorageResourceId="$checkpoint_storage_resource_id" \
+      checkpointContainerName="$checkpoint_container" \
+      checkpointCurrentPrefix="$checkpoint_current_prefix" \
+      checkpointJournalPrefix="$checkpoint_journal_prefix" \
+      fileshareCheckpointBlobName="$fileshare_checkpoint_blob" \
+      datalakeCheckpointBlobName="$datalake_checkpoint_blob" \
+      bootstrapWatermark="$bootstrap_watermark" \
+      deleteReconcileScheduleHours="$delete_reconcile_schedule_hours" \
+      deleteReconcileTriggerStartTime="$delete_reconcile_trigger_start_time" \
       sourceDatalakeAccountName="$source_dl_account" \
       destDatalakeAccountName="$dest_dl_account" \
       sourceDatalakeFilesystem="$source_dl_filesystem" \

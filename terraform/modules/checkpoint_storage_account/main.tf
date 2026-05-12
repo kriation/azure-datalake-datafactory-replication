@@ -33,3 +33,39 @@ resource "azurerm_storage_container" "checkpoints" {
   storage_account_id    = azurerm_storage_account.this.id
   container_access_type = "private"
 }
+
+resource "azurerm_storage_management_policy" "checkpoint_retention" {
+  storage_account_id = azurerm_storage_account.this.id
+
+  rule {
+    name    = "checkpoint-version-retention"
+    enabled = true
+
+    filters {
+      prefix_match = [
+        "${var.container_name}/${var.journal_prefix}/",
+        "${var.container_name}/${var.current_prefix}/"
+      ]
+      blob_types = ["blockBlob"]
+    }
+
+    actions {
+      version {
+        delete_after_days_since_creation = var.version_retention_days
+      }
+
+      snapshot {
+        delete_after_days_since_creation_greater_than = var.version_retention_days
+      }
+    }
+  }
+}
+
+resource "azurerm_storage_container_immutability_policy" "checkpoint_container" {
+  count = var.journal_immutability_days > 0 ? 1 : 0
+
+  storage_container_resource_manager_id = azurerm_storage_container.checkpoints.id
+  immutability_period_in_days           = var.journal_immutability_days
+  locked                                = var.immutability_mode == "strict-regulated"
+  protected_append_writes_all_enabled   = true
+}

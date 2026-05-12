@@ -19,6 +19,18 @@ variable "container_name" {
   default     = "adf-checkpoints"
 }
 
+variable "current_prefix" {
+  description = "Path prefix for mutable checkpoint head blobs."
+  type        = string
+  default     = "current"
+}
+
+variable "journal_prefix" {
+  description = "Path prefix for checkpoint journal/audit blobs."
+  type        = string
+  default     = "journal"
+}
+
 variable "soft_delete_days" {
   description = "Blob soft-delete retention in days."
   type        = number

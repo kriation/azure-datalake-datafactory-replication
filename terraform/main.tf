@@ -363,6 +363,8 @@ module "canadaeast_checkpoint_storage" {
   resource_group_name       = module.canadaeast_rg.name
   location                  = module.canadaeast_rg.location
   container_name            = var.adf_checkpoint_container_name
+  current_prefix            = var.adf_checkpoint_current_prefix
+  journal_prefix            = var.adf_checkpoint_journal_prefix
   soft_delete_days          = var.adf_checkpoint_soft_delete_days
   version_retention_days    = var.adf_checkpoint_version_retention_days
   journal_immutability_days = var.adf_checkpoint_journal_immutability_days

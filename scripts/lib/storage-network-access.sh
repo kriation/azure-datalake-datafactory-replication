@@ -21,6 +21,10 @@ STORAGE_ACCESS_OPEN_ACCOUNTS=()
 
 STORAGE_BOOTSTRAP_PROPAGATION_TIMEOUT_SECONDS="${STORAGE_BOOTSTRAP_PROPAGATION_TIMEOUT_SECONDS:-120}"
 STORAGE_BOOTSTRAP_PROPAGATION_POLL_SECONDS="${STORAGE_BOOTSTRAP_PROPAGATION_POLL_SECONDS:-5}"
+# Data-plane enforcement can lag management-plane updates by several minutes.
+# Keep this configurable and default to a safer value for locked-down environments.
+STORAGE_DATA_PLANE_TIMEOUT_SECONDS="${STORAGE_DATA_PLANE_TIMEOUT_SECONDS:-300}"
+STORAGE_DATA_PLANE_POLL_SECONDS="${STORAGE_DATA_PLANE_POLL_SECONDS:-10}"
 # The storage file/blob data plane may lag the management API by 30-60 seconds after
 # a network rule change. Use a conservative sleep so uploads/downloads don't hit 403s.
 STORAGE_BOOTSTRAP_POST_READY_SLEEP_SECONDS="${STORAGE_BOOTSTRAP_POST_READY_SLEEP_SECONDS:-30}"
@@ -232,22 +236,25 @@ wait_for_storage_account_data_plane() {
   local service_type="$1"
   local account_name="$2"
   local account_key="$3"
-  local timeout="${4:-120}"
+  local timeout="${4:-$STORAGE_DATA_PLANE_TIMEOUT_SECONDS}"
   local elapsed=0
   local result
+  local last_error=""
 
   while (( elapsed < timeout )); do
     result=0
     if [[ "$service_type" == "file" ]]; then
-      az storage share list \
+      last_error="$(az storage share list \
         --account-name "$account_name" \
         --account-key "$account_key" \
-        -o none 2>/dev/null || result=$?
+        --only-show-errors \
+        -o none 2>&1)" || result=$?
     else
-      az storage fs list \
+      last_error="$(az storage fs list \
         --account-name "$account_name" \
         --account-key "$account_key" \
-        -o none 2>/dev/null || result=$?
+        --only-show-errors \
+        -o none 2>&1)" || result=$?
     fi
 
     if [[ "$result" -eq 0 ]]; then
@@ -260,5 +267,8 @@ wait_for_storage_account_data_plane() {
   done
 
   echo "Error: storage data plane for '${account_name}' (${service_type}) did not become accessible within ${timeout} seconds."
+  if [[ -n "$last_error" ]]; then
+    echo "Last Azure CLI error: ${last_error}"
+  fi
   exit 1
 }

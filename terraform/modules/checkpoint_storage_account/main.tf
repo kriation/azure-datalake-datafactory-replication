@@ -62,10 +62,12 @@ resource "azurerm_storage_management_policy" "checkpoint_retention" {
 }
 
 resource "azurerm_storage_container_immutability_policy" "checkpoint_container" {
-  count = var.journal_immutability_days > 0 ? 1 : 0
+  # Keep demo-regulated mode writable for checkpoint head updates.
+  # Strict mode enables container-level immutability.
+  count = var.journal_immutability_days > 0 && var.immutability_mode == "strict-regulated" ? 1 : 0
 
   storage_container_resource_manager_id = azurerm_storage_container.checkpoints.id
   immutability_period_in_days           = var.journal_immutability_days
-  locked                                = var.immutability_mode == "strict-regulated"
+  locked                                = true
   protected_append_writes_all_enabled   = true
 }

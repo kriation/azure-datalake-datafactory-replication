@@ -284,8 +284,10 @@ module "data_factory" {
   data_factory_principal_id            = module.data_factory_identity.principal_id
   source_storage_account               = module.eastus2_storage.name
   dest_storage_account                 = module.canadaeast_storage.name
-  source_fileshare_storage_resource_id = module.eastus2_storage.id
-  dest_fileshare_storage_resource_id   = module.canadaeast_storage.id
+  source_fileshare_storage_resource_id  = module.eastus2_storage.id
+  dest_fileshare_storage_resource_id    = module.canadaeast_storage.id
+  source_datalake_storage_resource_id   = module.eastus2_datalake.storage_account_id
+  dest_datalake_storage_resource_id     = module.canadaeast_datalake.storage_account_id
   key_vault_uri                        = module.canadaeast_key_vault.vault_uri
   source_datalake_storage_account      = module.eastus2_datalake.storage_account_name
   dest_datalake_storage_account        = module.canadaeast_datalake.storage_account_name

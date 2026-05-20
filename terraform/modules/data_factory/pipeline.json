@@ -21,7 +21,9 @@
     "sourceDatalakeAccountName": { "type": "String" },
     "destDatalakeAccountName": { "type": "String" },
     "sourceDatalakeFilesystem": { "type": "String" },
-    "destDatalakeFilesystem": { "type": "String" }
+    "destDatalakeFilesystem": { "type": "String" },
+    "sourceDatalakeStorageResourceId": { "type": "String" },
+    "destDatalakeStorageResourceId": { "type": "String" }
   },
   "resources": [
     {
@@ -64,6 +66,30 @@
       "properties": {
         "groupId": "blob",
         "privateLinkResourceId": "[parameters('checkpointStorageResourceId')]"
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/managedVirtualNetworks/managedPrivateEndpoints",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/default/adf-source-datalake-pe')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/managedVirtualNetworks/default')]"
+      ],
+      "properties": {
+        "groupId": "dfs",
+        "privateLinkResourceId": "[parameters('sourceDatalakeStorageResourceId')]"
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/managedVirtualNetworks/managedPrivateEndpoints",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/default/adf-dest-datalake-pe')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/managedVirtualNetworks/default')]"
+      ],
+      "properties": {
+        "groupId": "dfs",
+        "privateLinkResourceId": "[parameters('destDatalakeStorageResourceId')]"
       }
     },
     {

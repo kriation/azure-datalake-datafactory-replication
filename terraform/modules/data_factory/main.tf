@@ -17,6 +17,8 @@ resource "azurerm_resource_group_template_deployment" "pipeline" {
     destFileshareStorageResourceId   = { value = var.dest_fileshare_storage_resource_id },
     sourceDatalakeAccountName        = { value = var.source_datalake_storage_account },
     destDatalakeAccountName          = { value = var.dest_datalake_storage_account },
+    sourceDatalakeStorageResourceId  = { value = var.source_datalake_storage_resource_id },
+    destDatalakeStorageResourceId    = { value = var.dest_datalake_storage_resource_id },
     sourceDatalakeFilesystem         = { value = var.source_datalake_filesystem_name },
     destDatalakeFilesystem           = { value = var.dest_datalake_filesystem_name },
     # Incremental sync checkpoint parameters

@@ -975,6 +975,10 @@
           "deleteCount": {
             "type": "Integer",
             "defaultValue": 0
+          },
+          "deleteCountNext": {
+            "type": "Integer",
+            "defaultValue": 0
           }
         },
         "activities": [
@@ -1078,9 +1082,28 @@
                           }
                         ],
                         "typeProperties": {
-                          "variableName": "deleteCount",
+                          "variableName": "deleteCountNext",
                           "value": {
                             "value": "@add(variables('deleteCount'), 1)",
+                            "type": "Expression"
+                          }
+                        }
+                      },
+                      {
+                        "name": "ApplyDeleteCount",
+                        "type": "SetVariable",
+                        "dependsOn": [
+                          {
+                            "activity": "IncrementDeleteCount",
+                            "dependencyConditions": [
+                              "Succeeded"
+                            ]
+                          }
+                        ],
+                        "typeProperties": {
+                          "variableName": "deleteCount",
+                          "value": {
+                            "value": "@variables('deleteCountNext')",
                             "type": "Expression"
                           }
                         }

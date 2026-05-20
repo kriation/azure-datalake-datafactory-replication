@@ -907,7 +907,7 @@
                   "type": "IfCondition",
                   "typeProperties": {
                     "expression": {
-                      "value": "@and(not(contains(string(activity('SnapshotSourceList').output.childItems), concat('\"name\":\"', item().name, '\"'))), less(variables('deleteCount'), 500))",
+                      "value": "@and(equals(toLower(item().type), 'file'), not(contains(activity('SnapshotSourceList').output.childItems, item())), less(variables('deleteCount'), 500))",
                       "type": "Expression"
                     },
                     "ifTrueActivities": [
@@ -1063,7 +1063,7 @@
                   "type": "IfCondition",
                   "typeProperties": {
                     "expression": {
-                      "value": "@and(not(contains(string(activity('SnapshotSourceList').output.childItems), concat('\"name\":\"', item().name, '\"'))), less(variables('deleteCount'), 500))",
+                      "value": "@and(equals(toLower(item().type), 'file'), not(contains(activity('SnapshotSourceList').output.childItems, item())), less(variables('deleteCount'), 500))",
                       "type": "Expression"
                     },
                     "ifTrueActivities": [

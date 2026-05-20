@@ -23,6 +23,10 @@ DEST_RG="rg-demo-canadaeast"
 DEST_STORAGE="stdemocanadaeast"
 CHECKPOINT_RG="rg-demo-canadaeast"
 CHECKPOINT_STORAGE="stdcheckpointcanadaeast"
+SOURCE_DATALAKE_RG="rg-demo-eastus2"
+SOURCE_DATALAKE_STORAGE="stdldemoeastus2"
+DEST_DATALAKE_RG="rg-demo-canadaeast"
+DEST_DATALAKE_STORAGE="stdldemocanadaeast"
 
 # Usage info
 usage() {
@@ -32,17 +36,21 @@ usage() {
   echo "  -r DEST_RG             Destination resource group (default: rg-demo-canadaeast)"
   echo "  -s DEST_STORAGE        Destination storage account (default: stdemocanadaeast)"
   echo "  -c CHECKPOINT_STORAGE  Checkpoint storage account (default: stdcheckpointcanadaeast)"
+  echo "  -l SOURCE_DATALAKE     Source datalake storage account (default: stdldemoeastus2)"
+  echo "  -d DEST_DATALAKE       Destination datalake storage account (default: stdldemocanadaeast)"
   exit 1
 }
 
 # Parse arguments
-while getopts "g:a:r:s:c:h" opt; do
+while getopts "g:a:r:s:c:l:d:h" opt; do
   case $opt in
     g) SOURCE_RG="$OPTARG" ;;
     a) SOURCE_STORAGE="$OPTARG" ;;
     r) DEST_RG="$OPTARG" ;;
     s) DEST_STORAGE="$OPTARG" ;;
     c) CHECKPOINT_STORAGE="$OPTARG" ;;
+    l) SOURCE_DATALAKE_STORAGE="$OPTARG" ;;
+    d) DEST_DATALAKE_STORAGE="$OPTARG" ;;
     h) usage ;;
     *) usage ;;
   esac
@@ -129,7 +137,11 @@ echo ""
 approve_pending_endpoints "$DEST_STORAGE" "$DEST_RG" "Destination fileshare (Canada East)"
 echo ""
 approve_pending_endpoints "$CHECKPOINT_STORAGE" "$CHECKPOINT_RG" "Checkpoint storage (Canada East)"
+echo ""
+approve_pending_endpoints "$SOURCE_DATALAKE_STORAGE" "$SOURCE_DATALAKE_RG" "Source datalake (East US 2)"
+echo ""
+approve_pending_endpoints "$DEST_DATALAKE_STORAGE" "$DEST_DATALAKE_RG" "Destination datalake (Canada East)"
 
 echo ""
 echo "[INFO] Private endpoint approval complete."
-echo "[INFO] Run './scripts/validate-adf-health.sh --pipelines copyfilesharepipeline' to verify fileshare replication."
+echo "[INFO] Run './scripts/validate-adf-health.sh' to verify all pipeline replication."

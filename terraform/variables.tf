@@ -304,6 +304,12 @@ variable "adf_fileshare_reconcile_cap_blob_name" {
   default     = "fileshare-reconcile-cap.json"
 }
 
+variable "adf_datalake_reconcile_cap_blob_name" {
+  description = "Blob name for the per-run delete reconciliation cap counter (Data Lake Gen2)."
+  type        = string
+  default     = "datalake-reconcile-cap.json"
+}
+
 variable "adf_incremental_bootstrap_watermark" {
   description = "Fallback watermark used on first invocation when no checkpoint blob exists."
   type        = string

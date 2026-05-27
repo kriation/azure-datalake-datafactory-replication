@@ -200,6 +200,51 @@ first so a smoke run is not queued behind it:
 ./toggle-fileshare-reconcile-trigger.sh start
 ```
 
+## Datalake Reconciliation Design
+
+The Data Lake Gen2 reconcile pipeline (`deletereconciledalakepipeline`) mirrors
+the fileshare design exactly: an entry pipeline initializes a per-run cap
+counter blob and invokes a bounded-depth DFS chain that deletes
+destination-only items subject to the cap.
+
+Pipeline shape:
+
+- Entry pipeline `deletereconciledalakepipeline` initializes a counter blob in
+  `stdcheckpointcanadaeast/adf-checkpoints/current/<adf_datalake_reconcile_cap_blob_name>`
+  (default `datalake-reconcile-cap.json`) with the run id, cap, and
+  `deleteCount=0`, then invokes `reconciledatalakefolderlevel0` rooted at the
+  destination filesystem name.
+- Level pipelines `reconciledatalakefolderlevel0..7` form a bounded-depth DAG
+  identical in shape to the fileshare chain, but they bind the ADLS Gen2
+  datasets (`source_datalake` / `dest_datalake`) and use
+  `AzureBlobFSReadSettings` for the recursive `Delete` activity.
+- Folder paths are composed as `concat(folderPath, '/', item().name)` because
+  the ADLS Gen2 root is the filesystem name (no leading-slash edge case).
+- ADF rejects self-referential `ExecutePipeline`, hence the bounded chain (max
+  depth 8). Increase by raising `MAX_DEPTH` and regenerating the chain.
+
+Operational behavior is the same as the fileshare chain: per-run cap from
+`deleteReconcileCapPerRun`, deepest-first DFS, sibling subtrees short-circuited
+once the cap is exhausted, counter blob overwritten at the start of every run.
+
+Depth limit (demo scope): the chain handles up to **8 levels of nesting**.
+Entire orphan subfolders at any depth are removed by a single recursive
+`Delete`, so the limit only matters when source and destination share an
+ancestor folder and the destination has extra items more than 8 levels deep
+inside it. To raise the limit, edit `MAX_DEPTH` in the generator that produced
+`reconciledatalakefolderlevel*`, regenerate the chain in
+`terraform/modules/data_factory/pipeline.json`, and redeploy via
+`scripts/execute-phase5-6.sh`.
+
+When developing or testing this pipeline manually, stop the scheduled trigger
+first so a smoke run is not queued behind it:
+
+```bash
+./toggle-datalake-reconcile-trigger.sh stop
+# ...run smoke tests via az datafactory pipeline create-run ...
+./toggle-datalake-reconcile-trigger.sh start
+```
+
 ## Repository Layout
 
 - `terraform/`: root Terraform and variable files

@@ -69,17 +69,28 @@ Current phase status:
   (default `fileshare-reconcile-cap.json`). The entry pipeline initializes the
   counter; each delete increments it via a Web Activity PUT; `MaybeRecurseFolder`
   short-circuits once the cap is exhausted.
+- Datalake reconciliation uses the same shape:
+  `deletereconciledalakepipeline` → `reconciledatalakefolderlevel0..7`,
+  binding `source_datalake`/`dest_datalake` with `AzureBlobFSReadSettings`, and
+  enforcing the cap via a counter blob at
+  `stdcheckpointcanadaeast/adf-checkpoints/current/<adf_datalake_reconcile_cap_blob_name>`
+  (default `datalake-reconcile-cap.json`). The root folder path is the
+  destination filesystem name, so child paths are `concat(folderPath, '/', item().name)`
+  with no leading-slash special case.
 - The fileshare reconcile chain handles up to 8 nesting levels (level0..level7).
   Orphan subfolders at any depth are removed wholesale by a single recursive
   `Delete`, so the limit only bites when both source and destination share an
   ancestor folder and the destination has extra items below depth 8 inside it.
   To raise the limit, extend the level chain (regenerate via the generator that
-  produced `reconcilefilesharefolderlevel*`) and redeploy.
+  produced `reconcilefilesharefolderlevel*`) and redeploy. The datalake chain
+  has the same depth limit and the same way to raise it (regenerate
+  `reconciledatalakefolderlevel*`).
 - ADF rejects self-referential `ExecutePipeline` and rejects `IfCondition` nesting
   any loop activity. The chain layout exists to satisfy both constraints; do not
   collapse it back into a single recursive pipeline.
 - When testing reconcile pipelines, stop the scheduled trigger first
-  (`./toggle-fileshare-reconcile-trigger.sh stop`); otherwise Managed VNet IR
+  (`./toggle-fileshare-reconcile-trigger.sh stop` or
+  `./toggle-datalake-reconcile-trigger.sh stop`); otherwise Managed VNet IR
   queues your run behind an in-flight scheduled invocation.
 - `validate-adf-health.sh` supports `--skip-reconcile-check` when reconcile triggers are paused.
 - Reset script supports checkpoint audit preservation flags for demo vs strict operation.

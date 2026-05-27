@@ -69,6 +69,12 @@ Current phase status:
   (default `fileshare-reconcile-cap.json`). The entry pipeline initializes the
   counter; each delete increments it via a Web Activity PUT; `MaybeRecurseFolder`
   short-circuits once the cap is exhausted.
+- The fileshare reconcile chain handles up to 8 nesting levels (level0..level7).
+  Orphan subfolders at any depth are removed wholesale by a single recursive
+  `Delete`, so the limit only bites when both source and destination share an
+  ancestor folder and the destination has extra items below depth 8 inside it.
+  To raise the limit, extend the level chain (regenerate via the generator that
+  produced `reconcilefilesharefolderlevel*`) and redeploy.
 - ADF rejects self-referential `ExecutePipeline` and rejects `IfCondition` nesting
   any loop activity. The chain layout exists to satisfy both constraints; do not
   collapse it back into a single recursive pipeline.

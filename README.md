@@ -176,6 +176,21 @@ Operational behavior:
 - The counter blob is overwritten at the start of every run, so it always
   reflects the last completed/active run.
 
+Depth limit (demo scope):
+
+- The chain in this repo handles up to **8 levels of nesting** (`level0` walks
+  the root, `level7` is the deepest). At any depth, an entire orphan subfolder
+  is removed by a single recursive `Delete` activity, so the limit only matters
+  when *both* the source and destination share an ancestor folder *and* the
+  destination has extra items more than 8 levels deep inside it. In that case
+  those deeper orphans are silently left behind.
+- This is sized for the demo. To handle deeper trees, increase the chain
+  length: edit the generator (`MAX_DEPTH` in the script that produced
+  `reconcilefilesharefolderlevel*`), regenerate the chain in
+  `terraform/modules/data_factory/pipeline.json`, and redeploy via
+  `scripts/execute-phase5-6.sh`. Each extra level adds another
+  `reconcilefilesharefolderlevelN` pipeline of the same shape.
+
 When developing or testing this pipeline manually, stop the scheduled trigger
 first so a smoke run is not queued behind it:
 

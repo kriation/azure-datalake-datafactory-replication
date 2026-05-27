@@ -62,6 +62,19 @@ Current phase status:
 ## Operational Guardrails
 
 - Reconciliation pipelines include a per-run delete cap to reduce blast radius.
+- Fileshare reconciliation walks nested folders via a bounded-depth chain
+  (`deletereconcilefilesharepipeline` → `reconcilefilesharefolderlevel0..7`)
+  and enforces the cap via a counter blob at
+  `stdcheckpointcanadaeast/adf-checkpoints/current/<adf_fileshare_reconcile_cap_blob_name>`
+  (default `fileshare-reconcile-cap.json`). The entry pipeline initializes the
+  counter; each delete increments it via a Web Activity PUT; `MaybeRecurseFolder`
+  short-circuits once the cap is exhausted.
+- ADF rejects self-referential `ExecutePipeline` and rejects `IfCondition` nesting
+  any loop activity. The chain layout exists to satisfy both constraints; do not
+  collapse it back into a single recursive pipeline.
+- When testing reconcile pipelines, stop the scheduled trigger first
+  (`./toggle-fileshare-reconcile-trigger.sh stop`); otherwise Managed VNet IR
+  queues your run behind an in-flight scheduled invocation.
 - `validate-adf-health.sh` supports `--skip-reconcile-check` when reconcile triggers are paused.
 - Reset script supports checkpoint audit preservation flags for demo vs strict operation.
 

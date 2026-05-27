@@ -9,7 +9,10 @@ What replicates:
 How replication works:
 - Copy pipelines run every 5 minutes using incremental watermark windows.
 - Reconciliation pipelines run twice daily to delete destination-only items.
-- A dedicated checkpoint storage account stores cursor state and operational logs.
+- Fileshare reconciliation walks nested folders via a bounded-depth pipeline chain
+  (max depth 8) and enforces a global per-run delete cap tracked in a counter blob.
+- A dedicated checkpoint storage account stores cursor state, the reconcile cap counter,
+  and operational logs.
 
 ## What Gets Deployed
 
@@ -141,6 +144,46 @@ Useful options:
 - ARM resource names/order are case-sensitive in the Data Factory template.
 - Reconciliation includes a per-run delete cap for demo safety.
 - Data Factory CMK binding is effectively permanent; removing it requires Data Factory recreation.
+
+## Fileshare Reconciliation Design
+
+The fileshare reconcile pipeline (`deletereconcilefilesharepipeline`) recursively
+walks the destination share and deletes destination-only items, bounded by a
+global per-run delete cap.
+
+Pipeline shape:
+
+- Entry pipeline `deletereconcilefilesharepipeline` initializes a counter blob
+  in `stdcheckpointcanadaeast/adf-checkpoints/current/<adf_fileshare_reconcile_cap_blob_name>`
+  (default `fileshare-reconcile-cap.json`) with the run id, cap, and `deleteCount=0`,
+  then invokes `reconcilefilesharefolderlevel0`.
+- Level pipelines `reconcilefilesharefolderlevel0..7` form a bounded-depth DAG.
+  Each level runs `GetMetadata` on source and destination, then a sequential
+  `ForEach` over destination children; per child it re-reads the cap counter,
+  evaluates three parallel `IfCondition` branches (delete file, delete folder,
+  recurse into subfolder), and increments the counter via Web Activity PUT after
+  each delete. The recurse branch also gates on the cap so sibling subtrees are
+  short-circuited once the cap is exhausted.
+- ADF rejects self-referential `ExecutePipeline`, hence the bounded chain (max
+  depth 8). Increase by raising `MAX_DEPTH` and regenerating the chain.
+
+Operational behavior:
+
+- Per-run cap is configurable via the pipeline parameter `deleteReconcileCapPerRun`
+  (default from `adf_reconcile_delete_cap_per_run`). The trigger passes this in.
+- Delete order is deepest-first (DFS); when the cap is hit, remaining files in
+  the current level and all sibling subtrees are skipped.
+- The counter blob is overwritten at the start of every run, so it always
+  reflects the last completed/active run.
+
+When developing or testing this pipeline manually, stop the scheduled trigger
+first so a smoke run is not queued behind it:
+
+```bash
+./toggle-fileshare-reconcile-trigger.sh stop
+# ...run smoke tests via az datafactory pipeline create-run ...
+./toggle-fileshare-reconcile-trigger.sh start
+```
 
 ## Repository Layout
 

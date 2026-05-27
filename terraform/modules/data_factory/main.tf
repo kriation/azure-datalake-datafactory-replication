@@ -29,6 +29,7 @@ resource "azurerm_resource_group_template_deployment" "pipeline" {
     checkpointJournalPrefix         = { value = var.adf_checkpoint_journal_prefix },
     fileshareCheckpointBlobName     = { value = var.adf_fileshare_checkpoint_blob_name },
     datalakeCheckpointBlobName      = { value = var.adf_datalake_checkpoint_blob_name },
+    fileshareReconcileCapBlobName   = { value = var.adf_fileshare_reconcile_cap_blob_name },
     bootstrapWatermark              = { value = var.adf_incremental_bootstrap_watermark },
     deleteReconcileScheduleHours    = { value = jsonencode(var.adf_delete_reconcile_schedule_hours) },
     deleteReconcileTriggerStartTime = { value = var.adf_delete_reconcile_trigger_start_time },

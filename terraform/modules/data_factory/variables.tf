@@ -118,6 +118,12 @@ variable "adf_datalake_checkpoint_blob_name" {
   default     = "datalake-sync-state.json"
 }
 
+variable "adf_fileshare_reconcile_cap_blob_name" {
+  description = "Blob name for the per-run delete reconciliation cap counter (file share)."
+  type        = string
+  default     = "fileshare-reconcile-cap.json"
+}
+
 variable "adf_incremental_bootstrap_watermark" {
   description = "Fallback watermark for first pipeline run when no checkpoint exists."
   type        = string

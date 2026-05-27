@@ -316,6 +316,12 @@ variable "adf_delete_reconcile_trigger_start_time" {
   default     = "2026-04-01T06:00:00Z"
 }
 
+variable "adf_delete_reconcile_cap_per_run" {
+  description = "Maximum number of deletes allowed per reconciliation pipeline run."
+  type        = number
+  default     = 500
+}
+
 variable "adf_checkpoint_soft_delete_days" {
   description = "Blob soft-delete retention days for the checkpoint storage account."
   type        = number

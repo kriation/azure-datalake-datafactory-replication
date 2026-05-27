@@ -18,6 +18,7 @@
     "bootstrapWatermark": { "type": "String" },
     "deleteReconcileScheduleHours": { "type": "String" },
     "deleteReconcileTriggerStartTime": { "type": "String" },
+    "deleteReconcileCapPerRun": { "type": "Int" },
     "sourceDatalakeAccountName": { "type": "String" },
     "destDatalakeAccountName": { "type": "String" },
     "sourceDatalakeFilesystem": { "type": "String" },
@@ -838,6 +839,12 @@
       ],
       "properties": {
         "concurrency": 1,
+        "parameters": {
+          "deleteReconcileCapPerRun": {
+            "type": "Int",
+            "defaultValue": "[parameters('deleteReconcileCapPerRun')]"
+          }
+        },
         "variables": {
           "deleteCount": {
             "type": "Integer",
@@ -907,7 +914,7 @@
                   "type": "IfCondition",
                   "typeProperties": {
                     "expression": {
-                      "value": "@and(equals(toLower(item().type), 'file'), not(contains(activity('SnapshotSourceList').output.childItems, item())), less(variables('deleteCount'), 500))",
+                      "value": "@and(equals(toLower(item().type), 'file'), not(contains(activity('SnapshotSourceList').output.childItems, item())), less(variables('deleteCount'), pipeline().parameters.deleteReconcileCapPerRun))",
                       "type": "Expression"
                     },
                     "ifTrueActivities": [
@@ -977,6 +984,82 @@
                       }
                     ]
                   }
+                },
+                {
+                  "name": "DeleteFolderIfMissingInSource",
+                  "type": "IfCondition",
+                  "typeProperties": {
+                    "expression": {
+                      "value": "@and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(activity('SnapshotSourceList').output.childItems, item())), less(variables('deleteCount'), pipeline().parameters.deleteReconcileCapPerRun))",
+                      "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                      {
+                        "name": "DeleteDestinationFolderItem",
+                        "type": "Delete",
+                        "policy": {
+                          "retry": 2,
+                          "retryIntervalInSeconds": 30
+                        },
+                        "typeProperties": {
+                          "dataset": {
+                            "referenceName": "dest_fileshare",
+                            "type": "DatasetReference",
+                            "parameters": {
+                              "folderPath": {
+                                "value": "@item().name",
+                                "type": "Expression"
+                              },
+                              "fileName": ""
+                            }
+                          },
+                          "storeSettings": {
+                            "type": "AzureFileStorageReadSettings",
+                            "recursive": true
+                          },
+                          "enableLogging": false
+                        }
+                      },
+                      {
+                        "name": "IncrementDeleteCountFolder",
+                        "type": "SetVariable",
+                        "dependsOn": [
+                          {
+                            "activity": "DeleteDestinationFolderItem",
+                            "dependencyConditions": [
+                              "Succeeded"
+                            ]
+                          }
+                        ],
+                        "typeProperties": {
+                          "variableName": "deleteCountNext",
+                          "value": {
+                            "value": "@add(variables('deleteCount'), 1)",
+                            "type": "Expression"
+                          }
+                        }
+                      },
+                      {
+                        "name": "ApplyDeleteCountFolder",
+                        "type": "SetVariable",
+                        "dependsOn": [
+                          {
+                            "activity": "IncrementDeleteCountFolder",
+                            "dependencyConditions": [
+                              "Succeeded"
+                            ]
+                          }
+                        ],
+                        "typeProperties": {
+                          "variableName": "deleteCount",
+                          "value": {
+                            "value": "@variables('deleteCountNext')",
+                            "type": "Expression"
+                          }
+                        }
+                      }
+                    ]
+                  }
                 }
               ]
             }
@@ -994,6 +1077,16 @@
       ],
       "properties": {
         "concurrency": 1,
+        "parameters": {
+          "deleteReconcileCapPerRun": {
+            "type": "Int",
+            "defaultValue": "[parameters('deleteReconcileCapPerRun')]"
+          },
+          "destDatalakeFilesystem": {
+            "type": "String",
+            "defaultValue": "[parameters('destDatalakeFilesystem')]"
+          }
+        },
         "variables": {
           "deleteCount": {
             "type": "Integer",
@@ -1063,7 +1156,7 @@
                   "type": "IfCondition",
                   "typeProperties": {
                     "expression": {
-                      "value": "@and(equals(toLower(item().type), 'file'), not(contains(activity('SnapshotSourceList').output.childItems, item())), less(variables('deleteCount'), 500))",
+                      "value": "@and(equals(toLower(item().type), 'file'), not(contains(activity('SnapshotSourceList').output.childItems, item())), less(variables('deleteCount'), pipeline().parameters.deleteReconcileCapPerRun))",
                       "type": "Expression"
                     },
                     "ifTrueActivities": [
@@ -1079,7 +1172,10 @@
                             "referenceName": "dest_datalake",
                             "type": "DatasetReference",
                             "parameters": {
-                              "folderPath": "[parameters('destDatalakeFilesystem')]",
+                              "folderPath": {
+                                "value": "@pipeline().parameters.destDatalakeFilesystem",
+                                "type": "Expression"
+                              },
                               "fileName": {
                                 "value": "@item().name",
                                 "type": "Expression"
@@ -1118,6 +1214,82 @@
                         "dependsOn": [
                           {
                             "activity": "IncrementDeleteCount",
+                            "dependencyConditions": [
+                              "Succeeded"
+                            ]
+                          }
+                        ],
+                        "typeProperties": {
+                          "variableName": "deleteCount",
+                          "value": {
+                            "value": "@variables('deleteCountNext')",
+                            "type": "Expression"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "DeleteFolderIfMissingInSource",
+                  "type": "IfCondition",
+                  "typeProperties": {
+                    "expression": {
+                      "value": "@and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(activity('SnapshotSourceList').output.childItems, item())), less(variables('deleteCount'), pipeline().parameters.deleteReconcileCapPerRun))",
+                      "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                      {
+                        "name": "DeleteDestinationFolderItem",
+                        "type": "Delete",
+                        "policy": {
+                          "retry": 2,
+                          "retryIntervalInSeconds": 30
+                        },
+                        "typeProperties": {
+                          "dataset": {
+                            "referenceName": "dest_datalake",
+                            "type": "DatasetReference",
+                            "parameters": {
+                              "folderPath": {
+                                "value": "@concat(pipeline().parameters.destDatalakeFilesystem, '/', item().name)",
+                                "type": "Expression"
+                              },
+                              "fileName": ""
+                            }
+                          },
+                          "storeSettings": {
+                            "type": "AzureBlobFSReadSettings",
+                            "recursive": true
+                          },
+                          "enableLogging": false
+                        }
+                      },
+                      {
+                        "name": "IncrementDeleteCountFolder",
+                        "type": "SetVariable",
+                        "dependsOn": [
+                          {
+                            "activity": "DeleteDestinationFolderItem",
+                            "dependencyConditions": [
+                              "Succeeded"
+                            ]
+                          }
+                        ],
+                        "typeProperties": {
+                          "variableName": "deleteCountNext",
+                          "value": {
+                            "value": "@add(variables('deleteCount'), 1)",
+                            "type": "Expression"
+                          }
+                        }
+                      },
+                      {
+                        "name": "ApplyDeleteCountFolder",
+                        "type": "SetVariable",
+                        "dependsOn": [
+                          {
+                            "activity": "IncrementDeleteCountFolder",
                             "dependencyConditions": [
                               "Succeeded"
                             ]

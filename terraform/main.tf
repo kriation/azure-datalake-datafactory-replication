@@ -305,6 +305,7 @@ module "data_factory" {
   adf_incremental_bootstrap_watermark     = var.adf_incremental_bootstrap_watermark
   adf_delete_reconcile_schedule_hours     = var.adf_delete_reconcile_schedule_hours
   adf_delete_reconcile_trigger_start_time = var.adf_delete_reconcile_trigger_start_time
+  adf_delete_reconcile_cap_per_run        = var.adf_delete_reconcile_cap_per_run
   providers = {
     azurerm = azurerm.canadaeast
   }

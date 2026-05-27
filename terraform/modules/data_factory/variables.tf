@@ -135,3 +135,9 @@ variable "adf_delete_reconcile_trigger_start_time" {
   type        = string
   default     = "2026-04-01T06:00:00Z"
 }
+
+variable "adf_delete_reconcile_cap_per_run" {
+  description = "Maximum number of deletes allowed per reconciliation pipeline run."
+  type        = number
+  default     = 500
+}

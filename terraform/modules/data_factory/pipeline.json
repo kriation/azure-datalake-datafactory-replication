@@ -89,6 +89,18 @@
     },
     "destDatalakeStorageResourceId": {
       "type": "String"
+    },
+    "datalakeReconcileCurrentFrontierBlobName": {
+      "type": "String",
+      "defaultValue": "datalake-reconcile-current-frontier.json"
+    },
+    "datalakeReconcileNextFrontierBlobName": {
+      "type": "String",
+      "defaultValue": "datalake-reconcile-next-frontier.json"
+    },
+    "datalakeReconcileMaxDepth": {
+      "type": "Int",
+      "defaultValue": 32
     }
   },
   "resources": [
@@ -581,6 +593,60 @@
             "container": "[parameters('checkpointContainerName')]",
             "folderPath": "[parameters('checkpointCurrentPrefix')]",
             "fileName": "[parameters('datalakeReconcileCapBlobName')]"
+          },
+          "format": {
+            "type": "JsonFormat",
+            "filePattern": "setOfObjects"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/datalake_current_frontier')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/checkpoint_storage')]"
+      ],
+      "properties": {
+        "linkedServiceName": {
+          "referenceName": "checkpoint_storage",
+          "type": "LinkedServiceReference"
+        },
+        "type": "Json",
+        "typeProperties": {
+          "location": {
+            "type": "AzureBlobStorageLocation",
+            "container": "[parameters('checkpointContainerName')]",
+            "folderPath": "[parameters('checkpointCurrentPrefix')]",
+            "fileName": "[parameters('datalakeReconcileCurrentFrontierBlobName')]"
+          },
+          "format": {
+            "type": "JsonFormat",
+            "filePattern": "arrayOfObjects"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/datalake_next_frontier')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/checkpoint_storage')]"
+      ],
+      "properties": {
+        "linkedServiceName": {
+          "referenceName": "checkpoint_storage",
+          "type": "LinkedServiceReference"
+        },
+        "type": "Json",
+        "typeProperties": {
+          "location": {
+            "type": "AzureBlobStorageLocation",
+            "container": "[parameters('checkpointContainerName')]",
+            "folderPath": "[parameters('checkpointCurrentPrefix')]",
+            "fileName": "[parameters('datalakeReconcileNextFrontierBlobName')]"
           },
           "format": {
             "type": "JsonFormat",
@@ -1936,7 +2002,7 @@
     {
       "type": "Microsoft.DataFactory/factories/pipelines",
       "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconciledatalakefolderlevel7')]",
+      "name": "[concat(parameters('factoryName'), '/reconciledatalakefolderworker')]",
       "dependsOn": [
         "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_datalake')]",
         "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_datalake')]",
@@ -1951,6 +2017,12 @@
           "destFolderPath": {
             "type": "String"
           },
+          "currentDepth": {
+            "type": "Int"
+          },
+          "maxDepth": {
+            "type": "Int"
+          },
           "capPerRun": {
             "type": "Int"
           },
@@ -1969,6 +2041,10 @@
           "datalakeReconcileCapBlobName": {
             "type": "String",
             "defaultValue": "[parameters('datalakeReconcileCapBlobName')]"
+          },
+          "datalakeReconcileNextFrontierBlobName": {
+            "type": "String",
+            "defaultValue": "[parameters('datalakeReconcileNextFrontierBlobName')]"
           }
         },
         "variables": {},
@@ -2126,7 +2202,7 @@
                         "typeProperties": {
                           "method": "PUT",
                           "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
+                            "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.datalakeReconcileCapBlobName)",
                             "type": "Expression"
                           },
                           "headers": {
@@ -2134,13 +2210,13 @@
                             "x-ms-version": "2023-11-03",
                             "Content-Type": "application/json"
                           },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
                           "authentication": {
                             "type": "MSI",
                             "resource": "https://storage.azure.com/"
+                          },
+                          "body": {
+                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
+                            "type": "Expression"
                           }
                         }
                       }
@@ -2213,7 +2289,7 @@
                         "typeProperties": {
                           "method": "PUT",
                           "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
+                            "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.datalakeReconcileCapBlobName)",
                             "type": "Expression"
                           },
                           "headers": {
@@ -2221,234 +2297,13 @@
                             "x-ms-version": "2023-11-03",
                             "Content-Type": "application/json"
                           },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
                           "authentication": {
                             "type": "MSI",
                             "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Microsoft.DataFactory/factories/pipelines",
-      "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconciledatalakefolderlevel6')]",
-      "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/datalake_cap_counter')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconciledatalakefolderlevel7')]"
-      ],
-      "properties": {
-        "concurrency": 4,
-        "parameters": {
-          "sourceFolderPath": {
-            "type": "String"
-          },
-          "destFolderPath": {
-            "type": "String"
-          },
-          "capPerRun": {
-            "type": "Int"
-          },
-          "checkpointStorageAccountName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointStorageAccountName')]"
-          },
-          "checkpointContainerName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointContainerName')]"
-          },
-          "checkpointCurrentPrefix": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
-          },
-          "datalakeReconcileCapBlobName": {
-            "type": "String",
-            "defaultValue": "[parameters('datalakeReconcileCapBlobName')]"
-          }
-        },
-        "variables": {},
-        "activities": [
-          {
-            "name": "GetSrcChildren",
-            "type": "GetMetadata",
-            "dependsOn": [],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "source_datalake",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.sourceFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "GetDstChildren",
-            "type": "GetMetadata",
-            "dependsOn": [
-              {
-                "activity": "GetSrcChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "dest_datalake",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.destFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "ProcessChildren",
-            "type": "ForEach",
-            "dependsOn": [
-              {
-                "activity": "GetDstChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "isSequential": true,
-              "items": {
-                "value": "@coalesce(activity('GetDstChildren').output.childItems, json('[]'))",
-                "type": "Expression"
-              },
-              "activities": [
-                {
-                  "name": "ReReadCap",
-                  "type": "Lookup",
-                  "dependsOn": [],
-                  "policy": {
-                    "timeout": "0.00:05:00",
-                    "retry": 2,
-                    "retryIntervalInSeconds": 15
-                  },
-                  "typeProperties": {
-                    "dataset": {
-                      "referenceName": "datalake_cap_counter",
-                      "type": "DatasetReference"
-                    },
-                    "firstRowOnly": true
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFile",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(equals(toLower(item().type), 'file'), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFile",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_datalake",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@pipeline().parameters.destFolderPath",
-                                "type": "Expression"
-                              },
-                              "fileName": {
-                                "value": "@item().name",
-                                "type": "Expression"
-                              }
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureBlobFSReadSettings",
-                            "recursive": false
-                          },
-                          "enableLogging": false
-                        }
-                      },
-                      {
-                        "name": "BumpCapAfterFile",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFile",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
                           },
                           "body": {
                             "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
                             "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
                           }
                         }
                       }
@@ -2456,94 +2311,7 @@
                   }
                 },
                 {
-                  "name": "MaybeDeleteFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFolder",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_datalake",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@concat(pipeline().parameters.destFolderPath, '/', item().name)",
-                                "type": "Expression"
-                              },
-                              "fileName": ""
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureBlobFSReadSettings",
-                            "recursive": true
-                          },
-                          "enableLogging": false
-                        }
-                      },
-                      {
-                        "name": "BumpCapAfterFolder",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFolder",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeRecurseFolder",
+                  "name": "MaybeEnqueueSubfolder",
                   "type": "IfCondition",
                   "dependsOn": [
                     {
@@ -2563,49 +2331,39 @@
                   ],
                   "typeProperties": {
                     "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
+                      "value": "@and(and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(add(pipeline().parameters.currentDepth, 1), pipeline().parameters.maxDepth)), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
                       "type": "Expression"
                     },
                     "ifTrueActivities": [
                       {
-                        "name": "RecurseSubfolder",
-                        "type": "ExecutePipeline",
+                        "name": "AppendToNextFrontier",
+                        "type": "WebActivity",
                         "dependsOn": [],
+                        "connectVia": {
+                          "referenceName": "adf-managed-ir",
+                          "type": "IntegrationRuntimeReference"
+                        },
+                        "policy": {
+                          "retry": 3,
+                          "retryIntervalInSeconds": 30
+                        },
                         "typeProperties": {
-                          "pipeline": {
-                            "referenceName": "reconciledatalakefolderlevel7",
-                            "type": "PipelineReference"
+                          "method": "PUT",
+                          "url": {
+                            "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.datalakeReconcileNextFrontierBlobName, '?comp=appendblock')",
+                            "type": "Expression"
                           },
-                          "waitOnCompletion": true,
-                          "parameters": {
-                            "sourceFolderPath": {
-                              "value": "@concat(pipeline().parameters.sourceFolderPath, '/', item().name)",
-                              "type": "Expression"
-                            },
-                            "destFolderPath": {
-                              "value": "@concat(pipeline().parameters.destFolderPath, '/', item().name)",
-                              "type": "Expression"
-                            },
-                            "capPerRun": {
-                              "value": "@pipeline().parameters.capPerRun",
-                              "type": "Expression"
-                            },
-                            "checkpointStorageAccountName": {
-                              "value": "@pipeline().parameters.checkpointStorageAccountName",
-                              "type": "Expression"
-                            },
-                            "checkpointContainerName": {
-                              "value": "@pipeline().parameters.checkpointContainerName",
-                              "type": "Expression"
-                            },
-                            "checkpointCurrentPrefix": {
-                              "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                              "type": "Expression"
-                            },
-                            "datalakeReconcileCapBlobName": {
-                              "value": "@pipeline().parameters.datalakeReconcileCapBlobName",
-                              "type": "Expression"
-                            }
+                          "headers": {
+                            "x-ms-version": "2023-11-03",
+                            "Content-Type": "application/json"
+                          },
+                          "authentication": {
+                            "type": "MSI",
+                            "resource": "https://storage.azure.com/"
+                          },
+                          "body": {
+                            "value": "@concat('{\"src\":\"', concat(pipeline().parameters.sourceFolderPath, '/', item().name), '\",\"dst\":\"', concat(pipeline().parameters.destFolderPath, '/', item().name), '\",\"depth\":', string(add(pipeline().parameters.currentDepth, 1)), '}', uriComponentToString('%0A'))",
+                            "type": "Expression"
                           }
                         }
                       }
@@ -2621,99 +2379,165 @@
     {
       "type": "Microsoft.DataFactory/factories/pipelines",
       "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconciledatalakefolderlevel5')]",
+      "name": "[concat(parameters('factoryName'), '/reconciledatalakefrontierbatch')]",
       "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/datalake_cap_counter')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconciledatalakefolderlevel6')]"
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconciledatalakefolderworker')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/datalake_current_frontier')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/datalake_next_frontier')]"
       ],
       "properties": {
-        "concurrency": 4,
+        "concurrency": 1,
         "parameters": {
-          "sourceFolderPath": {
-            "type": "String"
-          },
-          "destFolderPath": {
-            "type": "String"
-          },
-          "capPerRun": {
-            "type": "Int"
-          },
           "checkpointStorageAccountName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointStorageAccountName')]"
+            "type": "String"
           },
           "checkpointContainerName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointContainerName')]"
+            "type": "String"
           },
           "checkpointCurrentPrefix": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
+            "type": "String"
           },
           "datalakeReconcileCapBlobName": {
-            "type": "String",
-            "defaultValue": "[parameters('datalakeReconcileCapBlobName')]"
+            "type": "String"
+          },
+          "datalakeReconcileCurrentFrontierBlobName": {
+            "type": "String"
+          },
+          "datalakeReconcileNextFrontierBlobName": {
+            "type": "String"
+          },
+          "deleteReconcileCapPerRun": {
+            "type": "Int"
+          },
+          "datalakeReconcileMaxDepth": {
+            "type": "Int"
           }
         },
         "variables": {},
         "activities": [
           {
-            "name": "GetSrcChildren",
-            "type": "GetMetadata",
+            "name": "LoadNextForPromotion",
+            "type": "Lookup",
             "dependsOn": [],
+            "policy": {
+              "timeout": "0.00:05:00",
+              "retry": 2,
+              "retryIntervalInSeconds": 15
+            },
             "typeProperties": {
               "dataset": {
-                "referenceName": "source_datalake",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.sourceFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
+                "referenceName": "datalake_next_frontier",
+                "type": "DatasetReference"
               },
-              "fieldList": [
-                "childItems"
-              ]
+              "firstRowOnly": false
             }
           },
           {
-            "name": "GetDstChildren",
-            "type": "GetMetadata",
+            "name": "PromoteToCurrent",
+            "type": "WebActivity",
             "dependsOn": [
               {
-                "activity": "GetSrcChildren",
+                "activity": "LoadNextForPromotion",
                 "dependencyConditions": [
                   "Succeeded"
                 ]
               }
             ],
+            "connectVia": {
+              "referenceName": "adf-managed-ir",
+              "type": "IntegrationRuntimeReference"
+            },
+            "policy": {
+              "retry": 3,
+              "retryIntervalInSeconds": 30
+            },
             "typeProperties": {
-              "dataset": {
-                "referenceName": "dest_datalake",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.destFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
+              "method": "PUT",
+              "url": {
+                "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.datalakeReconcileCurrentFrontierBlobName)",
+                "type": "Expression"
               },
-              "fieldList": [
-                "childItems"
-              ]
+              "headers": {
+                "x-ms-blob-type": "BlockBlob",
+                "x-ms-version": "2023-11-03",
+                "Content-Type": "application/json"
+              },
+              "authentication": {
+                "type": "MSI",
+                "resource": "https://storage.azure.com/"
+              },
+              "body": {
+                "value": "@string(coalesce(activity('LoadNextForPromotion').output.value, json('[]')))",
+                "type": "Expression"
+              }
             }
           },
           {
-            "name": "ProcessChildren",
+            "name": "ResetNextFrontier",
+            "type": "WebActivity",
+            "dependsOn": [
+              {
+                "activity": "PromoteToCurrent",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "connectVia": {
+              "referenceName": "adf-managed-ir",
+              "type": "IntegrationRuntimeReference"
+            },
+            "policy": {
+              "retry": 3,
+              "retryIntervalInSeconds": 30
+            },
+            "typeProperties": {
+              "method": "PUT",
+              "url": {
+                "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.datalakeReconcileNextFrontierBlobName)",
+                "type": "Expression"
+              },
+              "headers": {
+                "x-ms-blob-type": "AppendBlob",
+                "x-ms-version": "2023-11-03",
+                "Content-Length": "0"
+              },
+              "authentication": {
+                "type": "MSI",
+                "resource": "https://storage.azure.com/"
+              }
+            }
+          },
+          {
+            "name": "LoadCurrentFrontier",
+            "type": "Lookup",
+            "dependsOn": [
+              {
+                "activity": "ResetNextFrontier",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "policy": {
+              "timeout": "0.00:05:00",
+              "retry": 2,
+              "retryIntervalInSeconds": 15
+            },
+            "typeProperties": {
+              "dataset": {
+                "referenceName": "datalake_current_frontier",
+                "type": "DatasetReference"
+              },
+              "firstRowOnly": false
+            }
+          },
+          {
+            "name": "ProcessFrontier",
             "type": "ForEach",
             "dependsOn": [
               {
-                "activity": "GetDstChildren",
+                "activity": "LoadCurrentFrontier",
                 "dependencyConditions": [
                   "Succeeded"
                 ]
@@ -2722,2162 +2546,62 @@
             "typeProperties": {
               "isSequential": true,
               "items": {
-                "value": "@coalesce(activity('GetDstChildren').output.childItems, json('[]'))",
+                "value": "@coalesce(activity('LoadCurrentFrontier').output.value, json('[]'))",
                 "type": "Expression"
               },
               "activities": [
                 {
-                  "name": "ReReadCap",
-                  "type": "Lookup",
+                  "name": "RunWorker",
+                  "type": "ExecutePipeline",
                   "dependsOn": [],
-                  "policy": {
-                    "timeout": "0.00:05:00",
-                    "retry": 2,
-                    "retryIntervalInSeconds": 15
-                  },
                   "typeProperties": {
-                    "dataset": {
-                      "referenceName": "datalake_cap_counter",
-                      "type": "DatasetReference"
+                    "pipeline": {
+                      "referenceName": "reconciledatalakefolderworker",
+                      "type": "PipelineReference"
                     },
-                    "firstRowOnly": true
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFile",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(equals(toLower(item().type), 'file'), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFile",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_datalake",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@pipeline().parameters.destFolderPath",
-                                "type": "Expression"
-                              },
-                              "fileName": {
-                                "value": "@item().name",
-                                "type": "Expression"
-                              }
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureBlobFSReadSettings",
-                            "recursive": false
-                          },
-                          "enableLogging": false
-                        }
+                    "waitOnCompletion": true,
+                    "parameters": {
+                      "sourceFolderPath": {
+                        "value": "@item().src",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFile",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFile",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFolder",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_datalake",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@concat(pipeline().parameters.destFolderPath, '/', item().name)",
-                                "type": "Expression"
-                              },
-                              "fileName": ""
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureBlobFSReadSettings",
-                            "recursive": true
-                          },
-                          "enableLogging": false
-                        }
+                      "destFolderPath": {
+                        "value": "@item().dst",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFolder",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFolder",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeRecurseFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "MaybeDeleteFile",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    },
-                    {
-                      "activity": "MaybeDeleteFolder",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "RecurseSubfolder",
-                        "type": "ExecutePipeline",
-                        "dependsOn": [],
-                        "typeProperties": {
-                          "pipeline": {
-                            "referenceName": "reconciledatalakefolderlevel6",
-                            "type": "PipelineReference"
-                          },
-                          "waitOnCompletion": true,
-                          "parameters": {
-                            "sourceFolderPath": {
-                              "value": "@concat(pipeline().parameters.sourceFolderPath, '/', item().name)",
-                              "type": "Expression"
-                            },
-                            "destFolderPath": {
-                              "value": "@concat(pipeline().parameters.destFolderPath, '/', item().name)",
-                              "type": "Expression"
-                            },
-                            "capPerRun": {
-                              "value": "@pipeline().parameters.capPerRun",
-                              "type": "Expression"
-                            },
-                            "checkpointStorageAccountName": {
-                              "value": "@pipeline().parameters.checkpointStorageAccountName",
-                              "type": "Expression"
-                            },
-                            "checkpointContainerName": {
-                              "value": "@pipeline().parameters.checkpointContainerName",
-                              "type": "Expression"
-                            },
-                            "checkpointCurrentPrefix": {
-                              "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                              "type": "Expression"
-                            },
-                            "datalakeReconcileCapBlobName": {
-                              "value": "@pipeline().parameters.datalakeReconcileCapBlobName",
-                              "type": "Expression"
-                            }
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Microsoft.DataFactory/factories/pipelines",
-      "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconciledatalakefolderlevel4')]",
-      "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/datalake_cap_counter')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconciledatalakefolderlevel5')]"
-      ],
-      "properties": {
-        "concurrency": 4,
-        "parameters": {
-          "sourceFolderPath": {
-            "type": "String"
-          },
-          "destFolderPath": {
-            "type": "String"
-          },
-          "capPerRun": {
-            "type": "Int"
-          },
-          "checkpointStorageAccountName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointStorageAccountName')]"
-          },
-          "checkpointContainerName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointContainerName')]"
-          },
-          "checkpointCurrentPrefix": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
-          },
-          "datalakeReconcileCapBlobName": {
-            "type": "String",
-            "defaultValue": "[parameters('datalakeReconcileCapBlobName')]"
-          }
-        },
-        "variables": {},
-        "activities": [
-          {
-            "name": "GetSrcChildren",
-            "type": "GetMetadata",
-            "dependsOn": [],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "source_datalake",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.sourceFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "GetDstChildren",
-            "type": "GetMetadata",
-            "dependsOn": [
-              {
-                "activity": "GetSrcChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "dest_datalake",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.destFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "ProcessChildren",
-            "type": "ForEach",
-            "dependsOn": [
-              {
-                "activity": "GetDstChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "isSequential": true,
-              "items": {
-                "value": "@coalesce(activity('GetDstChildren').output.childItems, json('[]'))",
-                "type": "Expression"
-              },
-              "activities": [
-                {
-                  "name": "ReReadCap",
-                  "type": "Lookup",
-                  "dependsOn": [],
-                  "policy": {
-                    "timeout": "0.00:05:00",
-                    "retry": 2,
-                    "retryIntervalInSeconds": 15
-                  },
-                  "typeProperties": {
-                    "dataset": {
-                      "referenceName": "datalake_cap_counter",
-                      "type": "DatasetReference"
-                    },
-                    "firstRowOnly": true
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFile",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(equals(toLower(item().type), 'file'), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFile",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_datalake",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@pipeline().parameters.destFolderPath",
-                                "type": "Expression"
-                              },
-                              "fileName": {
-                                "value": "@item().name",
-                                "type": "Expression"
-                              }
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureBlobFSReadSettings",
-                            "recursive": false
-                          },
-                          "enableLogging": false
-                        }
+                      "currentDepth": {
+                        "value": "@int(item().depth)",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFile",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFile",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFolder",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_datalake",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@concat(pipeline().parameters.destFolderPath, '/', item().name)",
-                                "type": "Expression"
-                              },
-                              "fileName": ""
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureBlobFSReadSettings",
-                            "recursive": true
-                          },
-                          "enableLogging": false
-                        }
+                      "maxDepth": {
+                        "value": "@pipeline().parameters.datalakeReconcileMaxDepth",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFolder",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFolder",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeRecurseFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "MaybeDeleteFile",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    },
-                    {
-                      "activity": "MaybeDeleteFolder",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "RecurseSubfolder",
-                        "type": "ExecutePipeline",
-                        "dependsOn": [],
-                        "typeProperties": {
-                          "pipeline": {
-                            "referenceName": "reconciledatalakefolderlevel5",
-                            "type": "PipelineReference"
-                          },
-                          "waitOnCompletion": true,
-                          "parameters": {
-                            "sourceFolderPath": {
-                              "value": "@concat(pipeline().parameters.sourceFolderPath, '/', item().name)",
-                              "type": "Expression"
-                            },
-                            "destFolderPath": {
-                              "value": "@concat(pipeline().parameters.destFolderPath, '/', item().name)",
-                              "type": "Expression"
-                            },
-                            "capPerRun": {
-                              "value": "@pipeline().parameters.capPerRun",
-                              "type": "Expression"
-                            },
-                            "checkpointStorageAccountName": {
-                              "value": "@pipeline().parameters.checkpointStorageAccountName",
-                              "type": "Expression"
-                            },
-                            "checkpointContainerName": {
-                              "value": "@pipeline().parameters.checkpointContainerName",
-                              "type": "Expression"
-                            },
-                            "checkpointCurrentPrefix": {
-                              "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                              "type": "Expression"
-                            },
-                            "datalakeReconcileCapBlobName": {
-                              "value": "@pipeline().parameters.datalakeReconcileCapBlobName",
-                              "type": "Expression"
-                            }
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Microsoft.DataFactory/factories/pipelines",
-      "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconciledatalakefolderlevel3')]",
-      "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/datalake_cap_counter')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconciledatalakefolderlevel4')]"
-      ],
-      "properties": {
-        "concurrency": 4,
-        "parameters": {
-          "sourceFolderPath": {
-            "type": "String"
-          },
-          "destFolderPath": {
-            "type": "String"
-          },
-          "capPerRun": {
-            "type": "Int"
-          },
-          "checkpointStorageAccountName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointStorageAccountName')]"
-          },
-          "checkpointContainerName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointContainerName')]"
-          },
-          "checkpointCurrentPrefix": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
-          },
-          "datalakeReconcileCapBlobName": {
-            "type": "String",
-            "defaultValue": "[parameters('datalakeReconcileCapBlobName')]"
-          }
-        },
-        "variables": {},
-        "activities": [
-          {
-            "name": "GetSrcChildren",
-            "type": "GetMetadata",
-            "dependsOn": [],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "source_datalake",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.sourceFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "GetDstChildren",
-            "type": "GetMetadata",
-            "dependsOn": [
-              {
-                "activity": "GetSrcChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "dest_datalake",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.destFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "ProcessChildren",
-            "type": "ForEach",
-            "dependsOn": [
-              {
-                "activity": "GetDstChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "isSequential": true,
-              "items": {
-                "value": "@coalesce(activity('GetDstChildren').output.childItems, json('[]'))",
-                "type": "Expression"
-              },
-              "activities": [
-                {
-                  "name": "ReReadCap",
-                  "type": "Lookup",
-                  "dependsOn": [],
-                  "policy": {
-                    "timeout": "0.00:05:00",
-                    "retry": 2,
-                    "retryIntervalInSeconds": 15
-                  },
-                  "typeProperties": {
-                    "dataset": {
-                      "referenceName": "datalake_cap_counter",
-                      "type": "DatasetReference"
-                    },
-                    "firstRowOnly": true
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFile",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(equals(toLower(item().type), 'file'), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFile",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_datalake",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@pipeline().parameters.destFolderPath",
-                                "type": "Expression"
-                              },
-                              "fileName": {
-                                "value": "@item().name",
-                                "type": "Expression"
-                              }
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureBlobFSReadSettings",
-                            "recursive": false
-                          },
-                          "enableLogging": false
-                        }
+                      "capPerRun": {
+                        "value": "@pipeline().parameters.deleteReconcileCapPerRun",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFile",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFile",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFolder",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_datalake",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@concat(pipeline().parameters.destFolderPath, '/', item().name)",
-                                "type": "Expression"
-                              },
-                              "fileName": ""
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureBlobFSReadSettings",
-                            "recursive": true
-                          },
-                          "enableLogging": false
-                        }
+                      "checkpointStorageAccountName": {
+                        "value": "@pipeline().parameters.checkpointStorageAccountName",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFolder",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFolder",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeRecurseFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "MaybeDeleteFile",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    },
-                    {
-                      "activity": "MaybeDeleteFolder",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "RecurseSubfolder",
-                        "type": "ExecutePipeline",
-                        "dependsOn": [],
-                        "typeProperties": {
-                          "pipeline": {
-                            "referenceName": "reconciledatalakefolderlevel4",
-                            "type": "PipelineReference"
-                          },
-                          "waitOnCompletion": true,
-                          "parameters": {
-                            "sourceFolderPath": {
-                              "value": "@concat(pipeline().parameters.sourceFolderPath, '/', item().name)",
-                              "type": "Expression"
-                            },
-                            "destFolderPath": {
-                              "value": "@concat(pipeline().parameters.destFolderPath, '/', item().name)",
-                              "type": "Expression"
-                            },
-                            "capPerRun": {
-                              "value": "@pipeline().parameters.capPerRun",
-                              "type": "Expression"
-                            },
-                            "checkpointStorageAccountName": {
-                              "value": "@pipeline().parameters.checkpointStorageAccountName",
-                              "type": "Expression"
-                            },
-                            "checkpointContainerName": {
-                              "value": "@pipeline().parameters.checkpointContainerName",
-                              "type": "Expression"
-                            },
-                            "checkpointCurrentPrefix": {
-                              "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                              "type": "Expression"
-                            },
-                            "datalakeReconcileCapBlobName": {
-                              "value": "@pipeline().parameters.datalakeReconcileCapBlobName",
-                              "type": "Expression"
-                            }
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Microsoft.DataFactory/factories/pipelines",
-      "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconciledatalakefolderlevel2')]",
-      "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/datalake_cap_counter')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconciledatalakefolderlevel3')]"
-      ],
-      "properties": {
-        "concurrency": 4,
-        "parameters": {
-          "sourceFolderPath": {
-            "type": "String"
-          },
-          "destFolderPath": {
-            "type": "String"
-          },
-          "capPerRun": {
-            "type": "Int"
-          },
-          "checkpointStorageAccountName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointStorageAccountName')]"
-          },
-          "checkpointContainerName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointContainerName')]"
-          },
-          "checkpointCurrentPrefix": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
-          },
-          "datalakeReconcileCapBlobName": {
-            "type": "String",
-            "defaultValue": "[parameters('datalakeReconcileCapBlobName')]"
-          }
-        },
-        "variables": {},
-        "activities": [
-          {
-            "name": "GetSrcChildren",
-            "type": "GetMetadata",
-            "dependsOn": [],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "source_datalake",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.sourceFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "GetDstChildren",
-            "type": "GetMetadata",
-            "dependsOn": [
-              {
-                "activity": "GetSrcChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "dest_datalake",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.destFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "ProcessChildren",
-            "type": "ForEach",
-            "dependsOn": [
-              {
-                "activity": "GetDstChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "isSequential": true,
-              "items": {
-                "value": "@coalesce(activity('GetDstChildren').output.childItems, json('[]'))",
-                "type": "Expression"
-              },
-              "activities": [
-                {
-                  "name": "ReReadCap",
-                  "type": "Lookup",
-                  "dependsOn": [],
-                  "policy": {
-                    "timeout": "0.00:05:00",
-                    "retry": 2,
-                    "retryIntervalInSeconds": 15
-                  },
-                  "typeProperties": {
-                    "dataset": {
-                      "referenceName": "datalake_cap_counter",
-                      "type": "DatasetReference"
-                    },
-                    "firstRowOnly": true
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFile",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(equals(toLower(item().type), 'file'), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFile",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_datalake",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@pipeline().parameters.destFolderPath",
-                                "type": "Expression"
-                              },
-                              "fileName": {
-                                "value": "@item().name",
-                                "type": "Expression"
-                              }
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureBlobFSReadSettings",
-                            "recursive": false
-                          },
-                          "enableLogging": false
-                        }
+                      "checkpointContainerName": {
+                        "value": "@pipeline().parameters.checkpointContainerName",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFile",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFile",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFolder",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_datalake",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@concat(pipeline().parameters.destFolderPath, '/', item().name)",
-                                "type": "Expression"
-                              },
-                              "fileName": ""
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureBlobFSReadSettings",
-                            "recursive": true
-                          },
-                          "enableLogging": false
-                        }
+                      "checkpointCurrentPrefix": {
+                        "value": "@pipeline().parameters.checkpointCurrentPrefix",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFolder",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFolder",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeRecurseFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "MaybeDeleteFile",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    },
-                    {
-                      "activity": "MaybeDeleteFolder",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "RecurseSubfolder",
-                        "type": "ExecutePipeline",
-                        "dependsOn": [],
-                        "typeProperties": {
-                          "pipeline": {
-                            "referenceName": "reconciledatalakefolderlevel3",
-                            "type": "PipelineReference"
-                          },
-                          "waitOnCompletion": true,
-                          "parameters": {
-                            "sourceFolderPath": {
-                              "value": "@concat(pipeline().parameters.sourceFolderPath, '/', item().name)",
-                              "type": "Expression"
-                            },
-                            "destFolderPath": {
-                              "value": "@concat(pipeline().parameters.destFolderPath, '/', item().name)",
-                              "type": "Expression"
-                            },
-                            "capPerRun": {
-                              "value": "@pipeline().parameters.capPerRun",
-                              "type": "Expression"
-                            },
-                            "checkpointStorageAccountName": {
-                              "value": "@pipeline().parameters.checkpointStorageAccountName",
-                              "type": "Expression"
-                            },
-                            "checkpointContainerName": {
-                              "value": "@pipeline().parameters.checkpointContainerName",
-                              "type": "Expression"
-                            },
-                            "checkpointCurrentPrefix": {
-                              "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                              "type": "Expression"
-                            },
-                            "datalakeReconcileCapBlobName": {
-                              "value": "@pipeline().parameters.datalakeReconcileCapBlobName",
-                              "type": "Expression"
-                            }
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Microsoft.DataFactory/factories/pipelines",
-      "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconciledatalakefolderlevel1')]",
-      "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/datalake_cap_counter')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconciledatalakefolderlevel2')]"
-      ],
-      "properties": {
-        "concurrency": 4,
-        "parameters": {
-          "sourceFolderPath": {
-            "type": "String"
-          },
-          "destFolderPath": {
-            "type": "String"
-          },
-          "capPerRun": {
-            "type": "Int"
-          },
-          "checkpointStorageAccountName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointStorageAccountName')]"
-          },
-          "checkpointContainerName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointContainerName')]"
-          },
-          "checkpointCurrentPrefix": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
-          },
-          "datalakeReconcileCapBlobName": {
-            "type": "String",
-            "defaultValue": "[parameters('datalakeReconcileCapBlobName')]"
-          }
-        },
-        "variables": {},
-        "activities": [
-          {
-            "name": "GetSrcChildren",
-            "type": "GetMetadata",
-            "dependsOn": [],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "source_datalake",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.sourceFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "GetDstChildren",
-            "type": "GetMetadata",
-            "dependsOn": [
-              {
-                "activity": "GetSrcChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "dest_datalake",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.destFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "ProcessChildren",
-            "type": "ForEach",
-            "dependsOn": [
-              {
-                "activity": "GetDstChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "isSequential": true,
-              "items": {
-                "value": "@coalesce(activity('GetDstChildren').output.childItems, json('[]'))",
-                "type": "Expression"
-              },
-              "activities": [
-                {
-                  "name": "ReReadCap",
-                  "type": "Lookup",
-                  "dependsOn": [],
-                  "policy": {
-                    "timeout": "0.00:05:00",
-                    "retry": 2,
-                    "retryIntervalInSeconds": 15
-                  },
-                  "typeProperties": {
-                    "dataset": {
-                      "referenceName": "datalake_cap_counter",
-                      "type": "DatasetReference"
-                    },
-                    "firstRowOnly": true
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFile",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(equals(toLower(item().type), 'file'), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFile",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_datalake",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@pipeline().parameters.destFolderPath",
-                                "type": "Expression"
-                              },
-                              "fileName": {
-                                "value": "@item().name",
-                                "type": "Expression"
-                              }
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureBlobFSReadSettings",
-                            "recursive": false
-                          },
-                          "enableLogging": false
-                        }
+                      "datalakeReconcileCapBlobName": {
+                        "value": "@pipeline().parameters.datalakeReconcileCapBlobName",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFile",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFile",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
+                      "datalakeReconcileNextFrontierBlobName": {
+                        "value": "@pipeline().parameters.datalakeReconcileNextFrontierBlobName",
+                        "type": "Expression"
                       }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
                     }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFolder",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_datalake",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@concat(pipeline().parameters.destFolderPath, '/', item().name)",
-                                "type": "Expression"
-                              },
-                              "fileName": ""
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureBlobFSReadSettings",
-                            "recursive": true
-                          },
-                          "enableLogging": false
-                        }
-                      },
-                      {
-                        "name": "BumpCapAfterFolder",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFolder",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeRecurseFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "MaybeDeleteFile",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    },
-                    {
-                      "activity": "MaybeDeleteFolder",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "RecurseSubfolder",
-                        "type": "ExecutePipeline",
-                        "dependsOn": [],
-                        "typeProperties": {
-                          "pipeline": {
-                            "referenceName": "reconciledatalakefolderlevel2",
-                            "type": "PipelineReference"
-                          },
-                          "waitOnCompletion": true,
-                          "parameters": {
-                            "sourceFolderPath": {
-                              "value": "@concat(pipeline().parameters.sourceFolderPath, '/', item().name)",
-                              "type": "Expression"
-                            },
-                            "destFolderPath": {
-                              "value": "@concat(pipeline().parameters.destFolderPath, '/', item().name)",
-                              "type": "Expression"
-                            },
-                            "capPerRun": {
-                              "value": "@pipeline().parameters.capPerRun",
-                              "type": "Expression"
-                            },
-                            "checkpointStorageAccountName": {
-                              "value": "@pipeline().parameters.checkpointStorageAccountName",
-                              "type": "Expression"
-                            },
-                            "checkpointContainerName": {
-                              "value": "@pipeline().parameters.checkpointContainerName",
-                              "type": "Expression"
-                            },
-                            "checkpointCurrentPrefix": {
-                              "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                              "type": "Expression"
-                            },
-                            "datalakeReconcileCapBlobName": {
-                              "value": "@pipeline().parameters.datalakeReconcileCapBlobName",
-                              "type": "Expression"
-                            }
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Microsoft.DataFactory/factories/pipelines",
-      "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconciledatalakefolderlevel0')]",
-      "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_datalake')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/datalake_cap_counter')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconciledatalakefolderlevel1')]"
-      ],
-      "properties": {
-        "concurrency": 4,
-        "parameters": {
-          "sourceFolderPath": {
-            "type": "String"
-          },
-          "destFolderPath": {
-            "type": "String"
-          },
-          "capPerRun": {
-            "type": "Int"
-          },
-          "checkpointStorageAccountName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointStorageAccountName')]"
-          },
-          "checkpointContainerName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointContainerName')]"
-          },
-          "checkpointCurrentPrefix": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
-          },
-          "datalakeReconcileCapBlobName": {
-            "type": "String",
-            "defaultValue": "[parameters('datalakeReconcileCapBlobName')]"
-          }
-        },
-        "variables": {},
-        "activities": [
-          {
-            "name": "GetSrcChildren",
-            "type": "GetMetadata",
-            "dependsOn": [],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "source_datalake",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.sourceFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "GetDstChildren",
-            "type": "GetMetadata",
-            "dependsOn": [
-              {
-                "activity": "GetSrcChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "dest_datalake",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.destFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "ProcessChildren",
-            "type": "ForEach",
-            "dependsOn": [
-              {
-                "activity": "GetDstChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "isSequential": true,
-              "items": {
-                "value": "@coalesce(activity('GetDstChildren').output.childItems, json('[]'))",
-                "type": "Expression"
-              },
-              "activities": [
-                {
-                  "name": "ReReadCap",
-                  "type": "Lookup",
-                  "dependsOn": [],
-                  "policy": {
-                    "timeout": "0.00:05:00",
-                    "retry": 2,
-                    "retryIntervalInSeconds": 15
-                  },
-                  "typeProperties": {
-                    "dataset": {
-                      "referenceName": "datalake_cap_counter",
-                      "type": "DatasetReference"
-                    },
-                    "firstRowOnly": true
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFile",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(equals(toLower(item().type), 'file'), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFile",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_datalake",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@pipeline().parameters.destFolderPath",
-                                "type": "Expression"
-                              },
-                              "fileName": {
-                                "value": "@item().name",
-                                "type": "Expression"
-                              }
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureBlobFSReadSettings",
-                            "recursive": false
-                          },
-                          "enableLogging": false
-                        }
-                      },
-                      {
-                        "name": "BumpCapAfterFile",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFile",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFolder",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_datalake",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@concat(pipeline().parameters.destFolderPath, '/', item().name)",
-                                "type": "Expression"
-                              },
-                              "fileName": ""
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureBlobFSReadSettings",
-                            "recursive": true
-                          },
-                          "enableLogging": false
-                        }
-                      },
-                      {
-                        "name": "BumpCapAfterFolder",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFolder",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeRecurseFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "MaybeDeleteFile",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    },
-                    {
-                      "activity": "MaybeDeleteFolder",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "RecurseSubfolder",
-                        "type": "ExecutePipeline",
-                        "dependsOn": [],
-                        "typeProperties": {
-                          "pipeline": {
-                            "referenceName": "reconciledatalakefolderlevel1",
-                            "type": "PipelineReference"
-                          },
-                          "waitOnCompletion": true,
-                          "parameters": {
-                            "sourceFolderPath": {
-                              "value": "@concat(pipeline().parameters.sourceFolderPath, '/', item().name)",
-                              "type": "Expression"
-                            },
-                            "destFolderPath": {
-                              "value": "@concat(pipeline().parameters.destFolderPath, '/', item().name)",
-                              "type": "Expression"
-                            },
-                            "capPerRun": {
-                              "value": "@pipeline().parameters.capPerRun",
-                              "type": "Expression"
-                            },
-                            "checkpointStorageAccountName": {
-                              "value": "@pipeline().parameters.checkpointStorageAccountName",
-                              "type": "Expression"
-                            },
-                            "checkpointContainerName": {
-                              "value": "@pipeline().parameters.checkpointContainerName",
-                              "type": "Expression"
-                            },
-                            "checkpointCurrentPrefix": {
-                              "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                              "type": "Expression"
-                            },
-                            "datalakeReconcileCapBlobName": {
-                              "value": "@pipeline().parameters.datalakeReconcileCapBlobName",
-                              "type": "Expression"
-                            }
-                          }
-                        }
-                      }
-                    ]
                   }
                 }
               ]
@@ -4891,8 +2615,10 @@
       "apiVersion": "2018-06-01",
       "name": "[concat(parameters('factoryName'), '/deletereconciledalakepipeline')]",
       "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconciledatalakefolderlevel0')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/datalake_cap_counter')]"
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconciledatalakefrontierbatch')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/datalake_cap_counter')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/datalake_current_frontier')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/datalake_next_frontier')]"
       ],
       "properties": {
         "concurrency": 1,
@@ -4913,9 +2639,21 @@
             "type": "String",
             "defaultValue": "[parameters('datalakeReconcileCapBlobName')]"
           },
+          "datalakeReconcileCurrentFrontierBlobName": {
+            "type": "String",
+            "defaultValue": "[parameters('datalakeReconcileCurrentFrontierBlobName')]"
+          },
+          "datalakeReconcileNextFrontierBlobName": {
+            "type": "String",
+            "defaultValue": "[parameters('datalakeReconcileNextFrontierBlobName')]"
+          },
           "deleteReconcileCapPerRun": {
             "type": "Int",
             "defaultValue": "[parameters('deleteReconcileCapPerRun')]"
+          },
+          "datalakeReconcileMaxDepth": {
+            "type": "Int",
+            "defaultValue": "[parameters('datalakeReconcileMaxDepth')]"
           },
           "sourceDatalakeFolderPath": {
             "type": "String",
@@ -4943,7 +2681,7 @@
             "typeProperties": {
               "method": "PUT",
               "url": {
-                "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.datalakeReconcileCapBlobName)",
+                "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.datalakeReconcileCapBlobName)",
                 "type": "Expression"
               },
               "headers": {
@@ -4951,9 +2689,71 @@
                 "x-ms-version": "2023-11-03",
                 "Content-Type": "application/json"
               },
+              "authentication": {
+                "type": "MSI",
+                "resource": "https://storage.azure.com/"
+              },
               "body": {
                 "value": "@concat('{\"runId\":\"', pipeline().RunId, '\",\"cap\":', string(pipeline().parameters.deleteReconcileCapPerRun), ',\"deleteCount\":0,\"updatedUtc\":\"', utcNow(), '\"}')",
                 "type": "Expression"
+              }
+            }
+          },
+          {
+            "name": "InitCurrentFrontier",
+            "type": "WebActivity",
+            "dependsOn": [],
+            "connectVia": {
+              "referenceName": "adf-managed-ir",
+              "type": "IntegrationRuntimeReference"
+            },
+            "policy": {
+              "retry": 3,
+              "retryIntervalInSeconds": 30
+            },
+            "typeProperties": {
+              "method": "PUT",
+              "url": {
+                "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.datalakeReconcileCurrentFrontierBlobName)",
+                "type": "Expression"
+              },
+              "headers": {
+                "x-ms-blob-type": "BlockBlob",
+                "x-ms-version": "2023-11-03",
+                "Content-Type": "application/json"
+              },
+              "authentication": {
+                "type": "MSI",
+                "resource": "https://storage.azure.com/"
+              },
+              "body": {
+                "value": "@concat('[', ']')",
+                "type": "Expression"
+              }
+            }
+          },
+          {
+            "name": "InitNextFrontierBlob",
+            "type": "WebActivity",
+            "dependsOn": [],
+            "connectVia": {
+              "referenceName": "adf-managed-ir",
+              "type": "IntegrationRuntimeReference"
+            },
+            "policy": {
+              "retry": 3,
+              "retryIntervalInSeconds": 30
+            },
+            "typeProperties": {
+              "method": "PUT",
+              "url": {
+                "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.datalakeReconcileNextFrontierBlobName)",
+                "type": "Expression"
+              },
+              "headers": {
+                "x-ms-blob-type": "AppendBlob",
+                "x-ms-version": "2023-11-03",
+                "Content-Length": "0"
               },
               "authentication": {
                 "type": "MSI",
@@ -4962,52 +2762,169 @@
             }
           },
           {
-            "name": "RecurseRoot",
-            "type": "ExecutePipeline",
+            "name": "SeedRootIntoNextFrontier",
+            "type": "WebActivity",
+            "dependsOn": [
+              {
+                "activity": "InitNextFrontierBlob",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "connectVia": {
+              "referenceName": "adf-managed-ir",
+              "type": "IntegrationRuntimeReference"
+            },
+            "policy": {
+              "retry": 3,
+              "retryIntervalInSeconds": 30
+            },
+            "typeProperties": {
+              "method": "PUT",
+              "url": {
+                "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.datalakeReconcileNextFrontierBlobName, '?comp=appendblock')",
+                "type": "Expression"
+              },
+              "headers": {
+                "x-ms-version": "2023-11-03",
+                "Content-Type": "application/json"
+              },
+              "authentication": {
+                "type": "MSI",
+                "resource": "https://storage.azure.com/"
+              },
+              "body": {
+                "value": "@concat('{\"src\":\"', pipeline().parameters.sourceDatalakeFolderPath, '\",\"dst\":\"', pipeline().parameters.destDatalakeFolderPath, '\",\"depth\":0}', uriComponentToString('%0A'))",
+                "type": "Expression"
+              }
+            }
+          },
+          {
+            "name": "WalkTree",
+            "type": "Until",
             "dependsOn": [
               {
                 "activity": "InitCapCounter",
                 "dependencyConditions": [
                   "Succeeded"
                 ]
+              },
+              {
+                "activity": "InitCurrentFrontier",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              },
+              {
+                "activity": "SeedRootIntoNextFrontier",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
               }
             ],
             "typeProperties": {
-              "pipeline": {
-                "referenceName": "reconciledatalakefolderlevel0",
-                "type": "PipelineReference"
+              "expression": {
+                "value": "@or(equals(length(coalesce(activity('LoadNextFrontierForTermination').output.value, json('[]'))), 0), greaterOrEquals(int(activity('ReReadCapForTermination').output.firstRow.deleteCount), pipeline().parameters.deleteReconcileCapPerRun))",
+                "type": "Expression"
               },
-              "waitOnCompletion": true,
-              "parameters": {
-                "sourceFolderPath": {
-                  "value": "@pipeline().parameters.sourceDatalakeFolderPath",
-                  "type": "Expression"
+              "timeout": "0.01:00:00",
+              "activities": [
+                {
+                  "name": "RunBatch",
+                  "type": "ExecutePipeline",
+                  "dependsOn": [],
+                  "typeProperties": {
+                    "pipeline": {
+                      "referenceName": "reconciledatalakefrontierbatch",
+                      "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true,
+                    "parameters": {
+                      "checkpointStorageAccountName": {
+                        "value": "@pipeline().parameters.checkpointStorageAccountName",
+                        "type": "Expression"
+                      },
+                      "checkpointContainerName": {
+                        "value": "@pipeline().parameters.checkpointContainerName",
+                        "type": "Expression"
+                      },
+                      "checkpointCurrentPrefix": {
+                        "value": "@pipeline().parameters.checkpointCurrentPrefix",
+                        "type": "Expression"
+                      },
+                      "datalakeReconcileCapBlobName": {
+                        "value": "@pipeline().parameters.datalakeReconcileCapBlobName",
+                        "type": "Expression"
+                      },
+                      "datalakeReconcileCurrentFrontierBlobName": {
+                        "value": "@pipeline().parameters.datalakeReconcileCurrentFrontierBlobName",
+                        "type": "Expression"
+                      },
+                      "datalakeReconcileNextFrontierBlobName": {
+                        "value": "@pipeline().parameters.datalakeReconcileNextFrontierBlobName",
+                        "type": "Expression"
+                      },
+                      "deleteReconcileCapPerRun": {
+                        "value": "@pipeline().parameters.deleteReconcileCapPerRun",
+                        "type": "Expression"
+                      },
+                      "datalakeReconcileMaxDepth": {
+                        "value": "@pipeline().parameters.datalakeReconcileMaxDepth",
+                        "type": "Expression"
+                      }
+                    }
+                  }
                 },
-                "destFolderPath": {
-                  "value": "@pipeline().parameters.destDatalakeFolderPath",
-                  "type": "Expression"
+                {
+                  "name": "ReReadCapForTermination",
+                  "type": "Lookup",
+                  "dependsOn": [
+                    {
+                      "activity": "RunBatch",
+                      "dependencyConditions": [
+                        "Succeeded"
+                      ]
+                    }
+                  ],
+                  "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 15
+                  },
+                  "typeProperties": {
+                    "dataset": {
+                      "referenceName": "datalake_cap_counter",
+                      "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                  }
                 },
-                "capPerRun": {
-                  "value": "@pipeline().parameters.deleteReconcileCapPerRun",
-                  "type": "Expression"
-                },
-                "checkpointStorageAccountName": {
-                  "value": "@pipeline().parameters.checkpointStorageAccountName",
-                  "type": "Expression"
-                },
-                "checkpointContainerName": {
-                  "value": "@pipeline().parameters.checkpointContainerName",
-                  "type": "Expression"
-                },
-                "checkpointCurrentPrefix": {
-                  "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                  "type": "Expression"
-                },
-                "datalakeReconcileCapBlobName": {
-                  "value": "@pipeline().parameters.datalakeReconcileCapBlobName",
-                  "type": "Expression"
+                {
+                  "name": "LoadNextFrontierForTermination",
+                  "type": "Lookup",
+                  "dependsOn": [
+                    {
+                      "activity": "ReReadCapForTermination",
+                      "dependencyConditions": [
+                        "Succeeded"
+                      ]
+                    }
+                  ],
+                  "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 15
+                  },
+                  "typeProperties": {
+                    "dataset": {
+                      "referenceName": "datalake_next_frontier",
+                      "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                  }
                 }
-              }
+              ]
             }
           }
         ]

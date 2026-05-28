@@ -307,6 +307,9 @@ module "data_factory" {
   adf_fileshare_reconcile_next_frontier_blob_name    = var.adf_fileshare_reconcile_next_frontier_blob_name
   adf_fileshare_reconcile_max_depth                  = var.adf_fileshare_reconcile_max_depth
   adf_datalake_reconcile_cap_blob_name               = var.adf_datalake_reconcile_cap_blob_name
+  adf_datalake_reconcile_current_frontier_blob_name  = var.adf_datalake_reconcile_current_frontier_blob_name
+  adf_datalake_reconcile_next_frontier_blob_name     = var.adf_datalake_reconcile_next_frontier_blob_name
+  adf_datalake_reconcile_max_depth                   = var.adf_datalake_reconcile_max_depth
   adf_incremental_bootstrap_watermark     = var.adf_incremental_bootstrap_watermark
   adf_delete_reconcile_schedule_hours     = var.adf_delete_reconcile_schedule_hours
   adf_delete_reconcile_trigger_start_time = var.adf_delete_reconcile_trigger_start_time

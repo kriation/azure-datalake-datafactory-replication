@@ -328,6 +328,24 @@ variable "adf_datalake_reconcile_cap_blob_name" {
   default     = "datalake-reconcile-cap.json"
 }
 
+variable "adf_datalake_reconcile_current_frontier_blob_name" {
+  description = "Blob name for the BFS current-frontier work queue (Data Lake Gen2 reconcile)."
+  type        = string
+  default     = "datalake-reconcile-current-frontier.json"
+}
+
+variable "adf_datalake_reconcile_next_frontier_blob_name" {
+  description = "Blob name for the BFS next-frontier work queue (Data Lake Gen2 reconcile)."
+  type        = string
+  default     = "datalake-reconcile-next-frontier.json"
+}
+
+variable "adf_datalake_reconcile_max_depth" {
+  description = "Maximum recursion depth at which child subfolders are individually enqueued for reconcile. Beyond this, orphan subfolders are still removed wholesale via recursive Delete."
+  type        = number
+  default     = 32
+}
+
 variable "adf_incremental_bootstrap_watermark" {
   description = "Fallback watermark used on first invocation when no checkpoint blob exists."
   type        = string

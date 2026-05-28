@@ -148,6 +148,24 @@ variable "adf_datalake_reconcile_cap_blob_name" {
   default     = "datalake-reconcile-cap.json"
 }
 
+variable "adf_datalake_reconcile_current_frontier_blob_name" {
+  description = "Blob name for the BFS current-frontier work queue (Data Lake Gen2 reconcile)."
+  type        = string
+  default     = "datalake-reconcile-current-frontier.json"
+}
+
+variable "adf_datalake_reconcile_next_frontier_blob_name" {
+  description = "Blob name for the BFS next-frontier work queue (Data Lake Gen2 reconcile)."
+  type        = string
+  default     = "datalake-reconcile-next-frontier.json"
+}
+
+variable "adf_datalake_reconcile_max_depth" {
+  description = "Maximum recursion depth at which child subfolders are individually enqueued for reconcile."
+  type        = number
+  default     = 32
+}
+
 variable "adf_incremental_bootstrap_watermark" {
   description = "Fallback watermark for first pipeline run when no checkpoint exists."
   type        = string

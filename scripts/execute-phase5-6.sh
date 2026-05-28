@@ -358,6 +358,8 @@ phase_seed_initial_checkpoints() {
   local datalake_checkpoint_blob
   local bootstrap_watermark
   local account_key
+  local fileshare_current_frontier_blob
+  local fileshare_next_frontier_blob
 
   checkpoint_rg="$(terraform output -raw canadaeast_rg_name)"
   checkpoint_storage="$(terraform console -var-file=demo.tfvars <<< 'var.canadaeast_checkpoint_storage_name' | tr -d '"')"
@@ -366,6 +368,8 @@ phase_seed_initial_checkpoints() {
   fileshare_checkpoint_blob="$(terraform console -var-file=demo.tfvars <<< 'var.adf_fileshare_checkpoint_blob_name' | tr -d '"')"
   datalake_checkpoint_blob="$(terraform console -var-file=demo.tfvars <<< 'var.adf_datalake_checkpoint_blob_name' | tr -d '"')"
   bootstrap_watermark="$(terraform console -var-file=demo.tfvars <<< 'var.adf_incremental_bootstrap_watermark' | tr -d '"')"
+  fileshare_current_frontier_blob="$(terraform console -var-file=demo.tfvars <<< 'var.adf_fileshare_reconcile_current_frontier_blob_name' | tr -d '"')"
+  fileshare_next_frontier_blob="$(terraform console -var-file=demo.tfvars <<< 'var.adf_fileshare_reconcile_next_frontier_blob_name' | tr -d '"')"
 
   detect_bootstrap_cidr
   open_storage_account_access "$checkpoint_storage" "$checkpoint_rg"
@@ -407,6 +411,52 @@ phase_seed_initial_checkpoints() {
 
   seed_checkpoint_blob "$fileshare_checkpoint_blob" "copyfilesharepipeline"
   seed_checkpoint_blob "$datalake_checkpoint_blob" "copydatalakegen2pipeline"
+
+  seed_frontier_blob() {
+    local blob_name="$1"
+    local blob_type="$2"   # block | append
+    local body="$3"        # ignored for append
+    local blob_path="${checkpoint_current_prefix}/${blob_name}"
+    local blob_exists
+    local temp_file
+
+    blob_exists="$(az storage blob exists --account-name "$checkpoint_storage" --account-key "$account_key" --container-name "$checkpoint_container" --name "$blob_path" --query exists -o tsv)"
+    if [[ "$blob_exists" == "true" ]]; then
+      log_info "Frontier blob already exists; leaving unchanged: ${blob_path}"
+      return 0
+    fi
+
+    temp_file="$(mktemp)"
+    if [[ "$blob_type" == "append" ]]; then
+      : > "$temp_file"
+      az storage blob upload \
+        --account-name "$checkpoint_storage" \
+        --account-key "$account_key" \
+        --container-name "$checkpoint_container" \
+        --name "$blob_path" \
+        --file "$temp_file" \
+        --type append \
+        --overwrite false \
+        --only-show-errors >/dev/null
+    else
+      printf '%s' "$body" > "$temp_file"
+      az storage blob upload \
+        --account-name "$checkpoint_storage" \
+        --account-key "$account_key" \
+        --container-name "$checkpoint_container" \
+        --name "$blob_path" \
+        --file "$temp_file" \
+        --overwrite false \
+        --only-show-errors >/dev/null
+    fi
+
+    rm -f "$temp_file"
+    log_success "Seeded ${blob_type} frontier blob: ${blob_path}"
+  }
+
+  seed_frontier_blob "$fileshare_current_frontier_blob" "block" "[]"
+  seed_frontier_blob "$fileshare_next_frontier_blob" "append" ""
+
   close_storage_account_access "$checkpoint_storage" "$checkpoint_rg"
 
   log_success "Checkpoint seeding complete"

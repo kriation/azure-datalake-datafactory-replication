@@ -153,43 +153,52 @@ global per-run delete cap.
 
 Pipeline shape:
 
-- Entry pipeline `deletereconcilefilesharepipeline` initializes a counter blob
-  in `stdcheckpointcanadaeast/adf-checkpoints/current/<adf_fileshare_reconcile_cap_blob_name>`
+- Driver pipeline `deletereconcilefilesharepipeline` initializes the cap counter
+  blob `stdcheckpointcanadaeast/adf-checkpoints/current/<adf_fileshare_reconcile_cap_blob_name>`
   (default `fileshare-reconcile-cap.json`) with the run id, cap, and `deleteCount=0`,
-  then invokes `reconcilefilesharefolderlevel0`.
-- Level pipelines `reconcilefilesharefolderlevel0..7` form a bounded-depth DAG.
-  Each level runs `GetMetadata` on source and destination, then a sequential
-  `ForEach` over destination children; per child it re-reads the cap counter,
-  evaluates three parallel `IfCondition` branches (delete file, delete folder,
-  recurse into subfolder), and increments the counter via Web Activity PUT after
-  each delete. The recurse branch also gates on the cap so sibling subtrees are
-  short-circuited once the cap is exhausted.
-- ADF rejects self-referential `ExecutePipeline`, hence the bounded chain (max
-  depth 8). Increase by raising `MAX_DEPTH` and regenerating the chain.
+  seeds an empty current-frontier block blob and an empty next-frontier append
+  blob, writes the root folder into next-frontier, then enters an `Until` loop.
+  Each iteration: promote next-frontier → current-frontier, reset next-frontier,
+  invoke `reconcilefilesharefrontierbatch`, re-read cap counter and next-frontier
+  for the termination predicate.
+- Batch pipeline `reconcilefilesharefrontierbatch` reads current-frontier and
+  runs a sequential `ForEach`, invoking `reconcilefilesharefolderworker` per
+  folder.
+- Worker pipeline `reconcilefilesharefolderworker` runs `GetMetadata` on source
+  and destination for a single folder, iterates destination children, re-reads
+  the cap counter before each potential delete, and (a) deletes orphan files
+  via `MaybeDeleteFile`, (b) deletes orphan folders wholesale via
+  `MaybeDeleteFolder` (single recursive `Delete`, counted as one cap unit), or
+  (c) appends the subfolder to next-frontier via `MaybeEnqueueSubfolder` so the
+  next BFS level descends into it. Each delete increments the cap counter via
+  Web Activity PUT.
+- Frontier state lives in two checkpoint blobs:
+  - `<adf_fileshare_reconcile_current_frontier_blob_name>` (default
+    `fileshare-reconcile-current-frontier.json`) — block blob, JSON array.
+  - `<adf_fileshare_reconcile_next_frontier_blob_name>` (default
+    `fileshare-reconcile-next-frontier.json`) — append blob, NDJSON. Workers
+    append concurrently via `PUT ?comp=appendblock`; no read-modify-write.
+- ADF rejects self-referential `ExecutePipeline`, `IfCondition` containing
+  loops, and `Until` directly containing `ForEach`. The driver/batch/worker
+  split exists to satisfy all three constraints.
 
 Operational behavior:
 
 - Per-run cap is configurable via the pipeline parameter `deleteReconcileCapPerRun`
   (default from `adf_reconcile_delete_cap_per_run`). The trigger passes this in.
-- Delete order is deepest-first (DFS); when the cap is hit, remaining files in
-  the current level and all sibling subtrees are skipped.
-- The counter blob is overwritten at the start of every run, so it always
-  reflects the last completed/active run.
+- Delete order is BFS (level-by-level, then alphabetical within a level). When
+  the cap is hit, the worker stops issuing deletes and the driver's termination
+  predicate ends the `Until` loop before the next level runs.
+- The counter and frontier blobs are overwritten at the start of every run, so
+  they always reflect the last completed/active run.
 
-Depth limit (demo scope):
+Depth limit (configurable):
 
-- The chain in this repo handles up to **8 levels of nesting** (`level0` walks
-  the root, `level7` is the deepest). At any depth, an entire orphan subfolder
-  is removed by a single recursive `Delete` activity, so the limit only matters
-  when *both* the source and destination share an ancestor folder *and* the
-  destination has extra items more than 8 levels deep inside it. In that case
-  those deeper orphans are silently left behind.
-- This is sized for the demo. To handle deeper trees, increase the chain
-  length: edit the generator (`MAX_DEPTH` in the script that produced
-  `reconcilefilesharefolderlevel*`), regenerate the chain in
-  `terraform/modules/data_factory/pipeline.json`, and redeploy via
-  `scripts/execute-phase5-6.sh`. Each extra level adds another
-  `reconcilefilesharefolderlevelN` pipeline of the same shape.
+- BFS depth is bounded by `adf_fileshare_reconcile_max_depth` (default `32`).
+  At max depth, `MaybeEnqueueSubfolder` stops enqueuing children and the parent
+  `MaybeDeleteFolder` deletes the subtree wholesale as one cap unit. To raise
+  the limit, bump the variable and redeploy via `scripts/execute-phase5-6.sh`.
+  No pipeline regeneration required.
 
 When developing or testing this pipeline manually, stop the scheduled trigger
 first so a smoke run is not queued behind it:

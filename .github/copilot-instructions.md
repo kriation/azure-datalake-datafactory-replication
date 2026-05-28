@@ -62,32 +62,50 @@ Current phase status:
 ## Operational Guardrails
 
 - Reconciliation pipelines include a per-run delete cap to reduce blast radius.
-- Fileshare reconciliation walks nested folders via a bounded-depth chain
-  (`deletereconcilefilesharepipeline` → `reconcilefilesharefolderlevel0..7`)
-  and enforces the cap via a counter blob at
+- Fileshare reconciliation uses a three-pipeline BFS work queue:
+  `deletereconcilefilesharepipeline` (driver) → `reconcilefilesharefrontierbatch`
+  (per-level batch) → `reconcilefilesharefolderworker` (per-folder worker). The
+  driver loops with an `Until` activity that, on each iteration, promotes the
+  next frontier to current, runs the batch over the current frontier, then
+  re-reads the cap counter and next frontier to decide whether to terminate.
+- Frontier state lives in two blobs under
+  `stdcheckpointcanadaeast/adf-checkpoints/current/`:
+  - `<adf_fileshare_reconcile_current_frontier_blob_name>`
+    (default `fileshare-reconcile-current-frontier.json`) — block blob, JSON
+    array of folder entries the batch iterates over.
+  - `<adf_fileshare_reconcile_next_frontier_blob_name>`
+    (default `fileshare-reconcile-next-frontier.json`) — append blob, NDJSON.
+    Workers append discovered subfolders via
+    `PUT ?comp=appendblock`, avoiding any read-modify-write contention.
+- The delete cap is still tracked at
   `stdcheckpointcanadaeast/adf-checkpoints/current/<adf_fileshare_reconcile_cap_blob_name>`
-  (default `fileshare-reconcile-cap.json`). The entry pipeline initializes the
-  counter; each delete increments it via a Web Activity PUT; `MaybeRecurseFolder`
-  short-circuits once the cap is exhausted.
-- Datalake reconciliation uses the same shape:
+  (default `fileshare-reconcile-cap.json`); each worker delete increments it
+  via Web Activity PUT, and both the worker (`MaybeDeleteFile`/`MaybeDeleteFolder`)
+  and the driver termination expression short-circuit once
+  `deleteCount >= cap`.
+- BFS depth is bounded by `adf_fileshare_reconcile_max_depth` (default `32`).
+  At max depth, `MaybeEnqueueSubfolder` stops enqueuing children and the parent
+  `MaybeDeleteFolder` deletes the subtree wholesale as a single cap unit. To
+  raise the limit, bump the variable and redeploy — no pipeline regeneration
+  required.
+- Datalake reconciliation still uses the older bounded-depth chain:
   `deletereconciledalakepipeline` → `reconciledatalakefolderlevel0..7`,
   binding `source_datalake`/`dest_datalake` with `AzureBlobFSReadSettings`, and
   enforcing the cap via a counter blob at
   `stdcheckpointcanadaeast/adf-checkpoints/current/<adf_datalake_reconcile_cap_blob_name>`
   (default `datalake-reconcile-cap.json`). The root folder path is the
   destination filesystem name, so child paths are `concat(folderPath, '/', item().name)`
-  with no leading-slash special case.
-- The fileshare reconcile chain handles up to 8 nesting levels (level0..level7).
-  Orphan subfolders at any depth are removed wholesale by a single recursive
-  `Delete`, so the limit only bites when both source and destination share an
-  ancestor folder and the destination has extra items below depth 8 inside it.
-  To raise the limit, extend the level chain (regenerate via the generator that
-  produced `reconcilefilesharefolderlevel*`) and redeploy. The datalake chain
-  has the same depth limit and the same way to raise it (regenerate
-  `reconciledatalakefolderlevel*`).
-- ADF rejects self-referential `ExecutePipeline` and rejects `IfCondition` nesting
-  any loop activity. The chain layout exists to satisfy both constraints; do not
-  collapse it back into a single recursive pipeline.
+  with no leading-slash special case. The datalake chain handles up to 8 nesting
+  levels; raising the limit requires regenerating `reconciledatalakefolderlevel*`.
+  Porting datalake to the BFS pattern is a follow-up; do not assume parity yet.
+- ADF rejects self-referential `ExecutePipeline`, rejects `IfCondition` nesting
+  any loop activity, and rejects `Until` directly containing a `ForEach`. The
+  driver/batch/worker split exists to satisfy all three constraints; do not
+  collapse them back together.
+- ARM templates evaluate Web Activity body fields that start with `[` or that
+  are empty `""` as expressions. When seeding the frontier blobs, omit the body
+  entirely for the empty append blob, and use `@concat('[', ']')` for an empty
+  JSON array literal.
 - When testing reconcile pipelines, stop the scheduled trigger first
   (`./toggle-fileshare-reconcile-trigger.sh stop` or
   `./toggle-datalake-reconcile-trigger.sh stop`); otherwise Managed VNet IR

@@ -88,16 +88,20 @@ Current phase status:
   `MaybeDeleteFolder` deletes the subtree wholesale as a single cap unit. To
   raise the limit, bump the variable and redeploy — no pipeline regeneration
   required.
-- Datalake reconciliation still uses the older bounded-depth chain:
-  `deletereconciledalakepipeline` → `reconciledatalakefolderlevel0..7`,
-  binding `source_datalake`/`dest_datalake` with `AzureBlobFSReadSettings`, and
-  enforcing the cap via a counter blob at
+- Datalake reconciliation now uses the same BFS pattern:
+  `deletereconciledalakepipeline` (driver) → `reconciledatalakefrontierbatch`
+  (per-level batch) → `reconciledatalakefolderworker` (per-folder worker),
+  binding `source_datalake`/`dest_datalake` with `AzureBlobFSReadSettings` and
+  enforcing the cap via the counter blob at
   `stdcheckpointcanadaeast/adf-checkpoints/current/<adf_datalake_reconcile_cap_blob_name>`
-  (default `datalake-reconcile-cap.json`). The root folder path is the
-  destination filesystem name, so child paths are `concat(folderPath, '/', item().name)`
-  with no leading-slash special case. The datalake chain handles up to 8 nesting
-  levels; raising the limit requires regenerating `reconciledatalakefolderlevel*`.
-  Porting datalake to the BFS pattern is a follow-up; do not assume parity yet.
+  (default `datalake-reconcile-cap.json`). Frontier state lives in
+  `<adf_datalake_reconcile_current_frontier_blob_name>` (block blob, JSON
+  array) and `<adf_datalake_reconcile_next_frontier_blob_name>` (append blob,
+  NDJSON). The root folder path defaults to the destination filesystem name,
+  and child paths are `concat(folderPath, '/', item().name)` with no
+  leading-slash special case. BFS depth is bounded by
+  `adf_datalake_reconcile_max_depth` (default `32`); raise via Terraform
+  variable, no pipeline regeneration required.
 - ADF rejects self-referential `ExecutePipeline`, rejects `IfCondition` nesting
   any loop activity, and rejects `Until` directly containing a `ForEach`. The
   driver/batch/worker split exists to satisfy all three constraints; do not

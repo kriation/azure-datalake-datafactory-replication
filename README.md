@@ -212,38 +212,52 @@ first so a smoke run is not queued behind it:
 ## Datalake Reconciliation Design
 
 The Data Lake Gen2 reconcile pipeline (`deletereconciledalakepipeline`) mirrors
-the fileshare design exactly: an entry pipeline initializes a per-run cap
-counter blob and invokes a bounded-depth DFS chain that deletes
-destination-only items subject to the cap.
+the fileshare BFS design exactly: a driver pipeline initializes the per-run cap
+counter and frontier blobs, then drives a level-by-level BFS via a batch
+pipeline and per-folder workers.
 
 Pipeline shape:
 
-- Entry pipeline `deletereconciledalakepipeline` initializes a counter blob in
-  `stdcheckpointcanadaeast/adf-checkpoints/current/<adf_datalake_reconcile_cap_blob_name>`
-  (default `datalake-reconcile-cap.json`) with the run id, cap, and
-  `deleteCount=0`, then invokes `reconciledatalakefolderlevel0` rooted at the
-  destination filesystem name.
-- Level pipelines `reconciledatalakefolderlevel0..7` form a bounded-depth DAG
-  identical in shape to the fileshare chain, but they bind the ADLS Gen2
-  datasets (`source_datalake` / `dest_datalake`) and use
-  `AzureBlobFSReadSettings` for the recursive `Delete` activity.
+- Driver pipeline `deletereconciledalakepipeline` initializes the cap counter
+  blob `stdcheckpointcanadaeast/adf-checkpoints/current/<adf_datalake_reconcile_cap_blob_name>`
+  (default `datalake-reconcile-cap.json`), seeds an empty current-frontier
+  block blob and an empty next-frontier append blob, writes the root folder
+  (defaulting to the destination filesystem name) into next-frontier, then
+  enters an `Until` loop. Each iteration: promote next-frontier →
+  current-frontier, reset next-frontier, invoke
+  `reconciledatalakefrontierbatch`, re-read cap counter and next-frontier for
+  the termination predicate.
+- Batch pipeline `reconciledatalakefrontierbatch` reads current-frontier and
+  runs a sequential `ForEach`, invoking `reconciledatalakefolderworker` per
+  folder.
+- Worker pipeline `reconciledatalakefolderworker` runs `GetMetadata` on source
+  and destination for a single folder, iterates destination children, re-reads
+  the cap counter before each potential delete, and (a) deletes orphan files
+  via `MaybeDeleteFile`, (b) deletes orphan folders wholesale via
+  `MaybeDeleteFolder` (single recursive `Delete` with
+  `AzureBlobFSReadSettings`, counted as one cap unit), or (c) appends the
+  subfolder to next-frontier via `MaybeEnqueueSubfolder` so the next BFS level
+  descends into it. Each delete increments the cap counter via Web Activity PUT.
+- Frontier state lives in two checkpoint blobs:
+  - `<adf_datalake_reconcile_current_frontier_blob_name>` (default
+    `datalake-reconcile-current-frontier.json`) — block blob, JSON array.
+  - `<adf_datalake_reconcile_next_frontier_blob_name>` (default
+    `datalake-reconcile-next-frontier.json`) — append blob, NDJSON. Workers
+    append concurrently via `PUT ?comp=appendblock`; no read-modify-write.
 - Folder paths are composed as `concat(folderPath, '/', item().name)` because
-  the ADLS Gen2 root is the filesystem name (no leading-slash edge case).
-- ADF rejects self-referential `ExecutePipeline`, hence the bounded chain (max
-  depth 8). Increase by raising `MAX_DEPTH` and regenerating the chain.
+  the ADLS Gen2 root is the filesystem name (no leading-slash edge case,
+  unlike the fileshare chain).
+- The same ADF constraints apply (no self-referential `ExecutePipeline`, no
+  `IfCondition` containing loops, no `Until` directly containing `ForEach`);
+  the driver/batch/worker split exists to satisfy all three.
 
-Operational behavior is the same as the fileshare chain: per-run cap from
-`deleteReconcileCapPerRun`, deepest-first DFS, sibling subtrees short-circuited
-once the cap is exhausted, counter blob overwritten at the start of every run.
+Depth limit (configurable):
 
-Depth limit (demo scope): the chain handles up to **8 levels of nesting**.
-Entire orphan subfolders at any depth are removed by a single recursive
-`Delete`, so the limit only matters when source and destination share an
-ancestor folder and the destination has extra items more than 8 levels deep
-inside it. To raise the limit, edit `MAX_DEPTH` in the generator that produced
-`reconciledatalakefolderlevel*`, regenerate the chain in
-`terraform/modules/data_factory/pipeline.json`, and redeploy via
-`scripts/execute-phase5-6.sh`.
+- BFS depth is bounded by `adf_datalake_reconcile_max_depth` (default `32`).
+  At max depth, `MaybeEnqueueSubfolder` stops enqueuing children and the parent
+  `MaybeDeleteFolder` deletes the subtree wholesale as one cap unit. To raise
+  the limit, bump the variable and redeploy via `scripts/execute-phase5-6.sh`.
+  No pipeline regeneration required.
 
 When developing or testing this pipeline manually, stop the scheduled trigger
 first so a smoke run is not queued behind it:

@@ -360,6 +360,8 @@ phase_seed_initial_checkpoints() {
   local account_key
   local fileshare_current_frontier_blob
   local fileshare_next_frontier_blob
+  local datalake_current_frontier_blob
+  local datalake_next_frontier_blob
 
   checkpoint_rg="$(terraform output -raw canadaeast_rg_name)"
   checkpoint_storage="$(terraform console -var-file=demo.tfvars <<< 'var.canadaeast_checkpoint_storage_name' | tr -d '"')"
@@ -370,6 +372,8 @@ phase_seed_initial_checkpoints() {
   bootstrap_watermark="$(terraform console -var-file=demo.tfvars <<< 'var.adf_incremental_bootstrap_watermark' | tr -d '"')"
   fileshare_current_frontier_blob="$(terraform console -var-file=demo.tfvars <<< 'var.adf_fileshare_reconcile_current_frontier_blob_name' | tr -d '"')"
   fileshare_next_frontier_blob="$(terraform console -var-file=demo.tfvars <<< 'var.adf_fileshare_reconcile_next_frontier_blob_name' | tr -d '"')"
+  datalake_current_frontier_blob="$(terraform console -var-file=demo.tfvars <<< 'var.adf_datalake_reconcile_current_frontier_blob_name' | tr -d '"')"
+  datalake_next_frontier_blob="$(terraform console -var-file=demo.tfvars <<< 'var.adf_datalake_reconcile_next_frontier_blob_name' | tr -d '"')"
 
   detect_bootstrap_cidr
   open_storage_account_access "$checkpoint_storage" "$checkpoint_rg"
@@ -456,6 +460,8 @@ phase_seed_initial_checkpoints() {
 
   seed_frontier_blob "$fileshare_current_frontier_blob" "block" "[]"
   seed_frontier_blob "$fileshare_next_frontier_blob" "append" ""
+  seed_frontier_blob "$datalake_current_frontier_blob" "block" "[]"
+  seed_frontier_blob "$datalake_next_frontier_blob" "append" ""
 
   close_storage_account_access "$checkpoint_storage" "$checkpoint_rg"
 

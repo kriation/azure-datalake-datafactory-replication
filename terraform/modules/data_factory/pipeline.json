@@ -44,6 +44,18 @@
     "fileshareReconcileCapBlobName": {
       "type": "String"
     },
+    "fileshareReconcileCurrentFrontierBlobName": {
+      "type": "String",
+      "defaultValue": "fileshare-reconcile-current-frontier.json"
+    },
+    "fileshareReconcileNextFrontierBlobName": {
+      "type": "String",
+      "defaultValue": "fileshare-reconcile-next-frontier.json"
+    },
+    "fileshareReconcileMaxDepth": {
+      "type": "Int",
+      "defaultValue": 32
+    },
     "datalakeReconcileCapBlobName": {
       "type": "String",
       "defaultValue": "datalake-reconcile-cap.json"
@@ -499,6 +511,60 @@
     {
       "type": "Microsoft.DataFactory/factories/datasets",
       "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/fileshare_current_frontier')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/checkpoint_storage')]"
+      ],
+      "properties": {
+        "linkedServiceName": {
+          "referenceName": "checkpoint_storage",
+          "type": "LinkedServiceReference"
+        },
+        "type": "Json",
+        "typeProperties": {
+          "location": {
+            "type": "AzureBlobStorageLocation",
+            "container": "[parameters('checkpointContainerName')]",
+            "folderPath": "[parameters('checkpointCurrentPrefix')]",
+            "fileName": "[parameters('fileshareReconcileCurrentFrontierBlobName')]"
+          },
+          "format": {
+            "type": "JsonFormat",
+            "filePattern": "arrayOfObjects"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
+      "name": "[concat(parameters('factoryName'), '/fileshare_next_frontier')]",
+      "dependsOn": [
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/checkpoint_storage')]"
+      ],
+      "properties": {
+        "linkedServiceName": {
+          "referenceName": "checkpoint_storage",
+          "type": "LinkedServiceReference"
+        },
+        "type": "Json",
+        "typeProperties": {
+          "location": {
+            "type": "AzureBlobStorageLocation",
+            "container": "[parameters('checkpointContainerName')]",
+            "folderPath": "[parameters('checkpointCurrentPrefix')]",
+            "fileName": "[parameters('fileshareReconcileNextFrontierBlobName')]"
+          },
+          "format": {
+            "type": "JsonFormat",
+            "filePattern": "setOfObjects"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DataFactory/factories/datasets",
+      "apiVersion": "2018-06-01",
       "name": "[concat(parameters('factoryName'), '/datalake_cap_counter')]",
       "dependsOn": [
         "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/linkedservices/checkpoint_storage')]"
@@ -939,7 +1005,7 @@
     {
       "type": "Microsoft.DataFactory/factories/pipelines",
       "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconcilefilesharefolderlevel7')]",
+      "name": "[concat(parameters('factoryName'), '/reconcilefilesharefolderworker')]",
       "dependsOn": [
         "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_fileshare')]",
         "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_fileshare')]",
@@ -954,6 +1020,12 @@
           "destFolderPath": {
             "type": "String"
           },
+          "currentDepth": {
+            "type": "Int"
+          },
+          "maxDepth": {
+            "type": "Int"
+          },
           "capPerRun": {
             "type": "Int"
           },
@@ -972,6 +1044,10 @@
           "fileshareReconcileCapBlobName": {
             "type": "String",
             "defaultValue": "[parameters('fileshareReconcileCapBlobName')]"
+          },
+          "fileshareReconcileNextFrontierBlobName": {
+            "type": "String",
+            "defaultValue": "[parameters('fileshareReconcileNextFrontierBlobName')]"
           }
         },
         "variables": {},
@@ -1129,7 +1205,7 @@
                         "typeProperties": {
                           "method": "PUT",
                           "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
+                            "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.fileshareReconcileCapBlobName)",
                             "type": "Expression"
                           },
                           "headers": {
@@ -1137,13 +1213,13 @@
                             "x-ms-version": "2023-11-03",
                             "Content-Type": "application/json"
                           },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
                           "authentication": {
                             "type": "MSI",
                             "resource": "https://storage.azure.com/"
+                          },
+                          "body": {
+                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
+                            "type": "Expression"
                           }
                         }
                       }
@@ -1216,7 +1292,7 @@
                         "typeProperties": {
                           "method": "PUT",
                           "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
+                            "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.fileshareReconcileCapBlobName)",
                             "type": "Expression"
                           },
                           "headers": {
@@ -1224,234 +1300,13 @@
                             "x-ms-version": "2023-11-03",
                             "Content-Type": "application/json"
                           },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
                           "authentication": {
                             "type": "MSI",
                             "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Microsoft.DataFactory/factories/pipelines",
-      "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconcilefilesharefolderlevel6')]",
-      "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/fileshare_cap_counter')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconcilefilesharefolderlevel7')]"
-      ],
-      "properties": {
-        "concurrency": 4,
-        "parameters": {
-          "sourceFolderPath": {
-            "type": "String"
-          },
-          "destFolderPath": {
-            "type": "String"
-          },
-          "capPerRun": {
-            "type": "Int"
-          },
-          "checkpointStorageAccountName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointStorageAccountName')]"
-          },
-          "checkpointContainerName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointContainerName')]"
-          },
-          "checkpointCurrentPrefix": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
-          },
-          "fileshareReconcileCapBlobName": {
-            "type": "String",
-            "defaultValue": "[parameters('fileshareReconcileCapBlobName')]"
-          }
-        },
-        "variables": {},
-        "activities": [
-          {
-            "name": "GetSrcChildren",
-            "type": "GetMetadata",
-            "dependsOn": [],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "source_fileshare",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.sourceFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "GetDstChildren",
-            "type": "GetMetadata",
-            "dependsOn": [
-              {
-                "activity": "GetSrcChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "dest_fileshare",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.destFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "ProcessChildren",
-            "type": "ForEach",
-            "dependsOn": [
-              {
-                "activity": "GetDstChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "isSequential": true,
-              "items": {
-                "value": "@coalesce(activity('GetDstChildren').output.childItems, json('[]'))",
-                "type": "Expression"
-              },
-              "activities": [
-                {
-                  "name": "ReReadCap",
-                  "type": "Lookup",
-                  "dependsOn": [],
-                  "policy": {
-                    "timeout": "0.00:05:00",
-                    "retry": 2,
-                    "retryIntervalInSeconds": 15
-                  },
-                  "typeProperties": {
-                    "dataset": {
-                      "referenceName": "fileshare_cap_counter",
-                      "type": "DatasetReference"
-                    },
-                    "firstRowOnly": true
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFile",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(equals(toLower(item().type), 'file'), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFile",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_fileshare",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@pipeline().parameters.destFolderPath",
-                                "type": "Expression"
-                              },
-                              "fileName": {
-                                "value": "@item().name",
-                                "type": "Expression"
-                              }
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureFileStorageReadSettings",
-                            "recursive": false
-                          },
-                          "enableLogging": false
-                        }
-                      },
-                      {
-                        "name": "BumpCapAfterFile",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFile",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
                           },
                           "body": {
                             "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
                             "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
                           }
                         }
                       }
@@ -1459,94 +1314,7 @@
                   }
                 },
                 {
-                  "name": "MaybeDeleteFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFolder",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_fileshare",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name))",
-                                "type": "Expression"
-                              },
-                              "fileName": ""
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureFileStorageReadSettings",
-                            "recursive": true
-                          },
-                          "enableLogging": false
-                        }
-                      },
-                      {
-                        "name": "BumpCapAfterFolder",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFolder",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeRecurseFolder",
+                  "name": "MaybeEnqueueSubfolder",
                   "type": "IfCondition",
                   "dependsOn": [
                     {
@@ -1566,49 +1334,39 @@
                   ],
                   "typeProperties": {
                     "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
+                      "value": "@and(and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(add(pipeline().parameters.currentDepth, 1), pipeline().parameters.maxDepth)), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
                       "type": "Expression"
                     },
                     "ifTrueActivities": [
                       {
-                        "name": "RecurseSubfolder",
-                        "type": "ExecutePipeline",
+                        "name": "AppendToNextFrontier",
+                        "type": "WebActivity",
                         "dependsOn": [],
+                        "connectVia": {
+                          "referenceName": "adf-managed-ir",
+                          "type": "IntegrationRuntimeReference"
+                        },
+                        "policy": {
+                          "retry": 3,
+                          "retryIntervalInSeconds": 30
+                        },
                         "typeProperties": {
-                          "pipeline": {
-                            "referenceName": "reconcilefilesharefolderlevel7",
-                            "type": "PipelineReference"
+                          "method": "PUT",
+                          "url": {
+                            "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.fileshareReconcileNextFrontierBlobName, '?comp=appendblock')",
+                            "type": "Expression"
                           },
-                          "waitOnCompletion": true,
-                          "parameters": {
-                            "sourceFolderPath": {
-                              "value": "@if(equals(pipeline().parameters.sourceFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.sourceFolderPath, '/', item().name))",
-                              "type": "Expression"
-                            },
-                            "destFolderPath": {
-                              "value": "@if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name))",
-                              "type": "Expression"
-                            },
-                            "capPerRun": {
-                              "value": "@pipeline().parameters.capPerRun",
-                              "type": "Expression"
-                            },
-                            "checkpointStorageAccountName": {
-                              "value": "@pipeline().parameters.checkpointStorageAccountName",
-                              "type": "Expression"
-                            },
-                            "checkpointContainerName": {
-                              "value": "@pipeline().parameters.checkpointContainerName",
-                              "type": "Expression"
-                            },
-                            "checkpointCurrentPrefix": {
-                              "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                              "type": "Expression"
-                            },
-                            "fileshareReconcileCapBlobName": {
-                              "value": "@pipeline().parameters.fileshareReconcileCapBlobName",
-                              "type": "Expression"
-                            }
+                          "headers": {
+                            "x-ms-version": "2023-11-03",
+                            "Content-Type": "application/json"
+                          },
+                          "authentication": {
+                            "type": "MSI",
+                            "resource": "https://storage.azure.com/"
+                          },
+                          "body": {
+                            "value": "@concat('{\"src\":\"', if(equals(pipeline().parameters.sourceFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.sourceFolderPath, '/', item().name)), '\",\"dst\":\"', if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name)), '\",\"depth\":', string(add(pipeline().parameters.currentDepth, 1)), '}', uriComponentToString('%0A'))",
+                            "type": "Expression"
                           }
                         }
                       }
@@ -1624,99 +1382,165 @@
     {
       "type": "Microsoft.DataFactory/factories/pipelines",
       "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconcilefilesharefolderlevel5')]",
+      "name": "[concat(parameters('factoryName'), '/reconcilefilesharefrontierbatch')]",
       "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/fileshare_cap_counter')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconcilefilesharefolderlevel6')]"
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconcilefilesharefolderworker')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/fileshare_current_frontier')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/fileshare_next_frontier')]"
       ],
       "properties": {
-        "concurrency": 4,
+        "concurrency": 1,
         "parameters": {
-          "sourceFolderPath": {
-            "type": "String"
-          },
-          "destFolderPath": {
-            "type": "String"
-          },
-          "capPerRun": {
-            "type": "Int"
-          },
           "checkpointStorageAccountName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointStorageAccountName')]"
+            "type": "String"
           },
           "checkpointContainerName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointContainerName')]"
+            "type": "String"
           },
           "checkpointCurrentPrefix": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
+            "type": "String"
           },
           "fileshareReconcileCapBlobName": {
-            "type": "String",
-            "defaultValue": "[parameters('fileshareReconcileCapBlobName')]"
+            "type": "String"
+          },
+          "fileshareReconcileCurrentFrontierBlobName": {
+            "type": "String"
+          },
+          "fileshareReconcileNextFrontierBlobName": {
+            "type": "String"
+          },
+          "deleteReconcileCapPerRun": {
+            "type": "Int"
+          },
+          "fileshareReconcileMaxDepth": {
+            "type": "Int"
           }
         },
         "variables": {},
         "activities": [
           {
-            "name": "GetSrcChildren",
-            "type": "GetMetadata",
+            "name": "LoadNextForPromotion",
+            "type": "Lookup",
             "dependsOn": [],
+            "policy": {
+              "timeout": "0.00:05:00",
+              "retry": 2,
+              "retryIntervalInSeconds": 15
+            },
             "typeProperties": {
               "dataset": {
-                "referenceName": "source_fileshare",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.sourceFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
+                "referenceName": "fileshare_next_frontier",
+                "type": "DatasetReference"
               },
-              "fieldList": [
-                "childItems"
-              ]
+              "firstRowOnly": false
             }
           },
           {
-            "name": "GetDstChildren",
-            "type": "GetMetadata",
+            "name": "PromoteToCurrent",
+            "type": "WebActivity",
             "dependsOn": [
               {
-                "activity": "GetSrcChildren",
+                "activity": "LoadNextForPromotion",
                 "dependencyConditions": [
                   "Succeeded"
                 ]
               }
             ],
+            "connectVia": {
+              "referenceName": "adf-managed-ir",
+              "type": "IntegrationRuntimeReference"
+            },
+            "policy": {
+              "retry": 3,
+              "retryIntervalInSeconds": 30
+            },
             "typeProperties": {
-              "dataset": {
-                "referenceName": "dest_fileshare",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.destFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
+              "method": "PUT",
+              "url": {
+                "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.fileshareReconcileCurrentFrontierBlobName)",
+                "type": "Expression"
               },
-              "fieldList": [
-                "childItems"
-              ]
+              "headers": {
+                "x-ms-blob-type": "BlockBlob",
+                "x-ms-version": "2023-11-03",
+                "Content-Type": "application/json"
+              },
+              "authentication": {
+                "type": "MSI",
+                "resource": "https://storage.azure.com/"
+              },
+              "body": {
+                "value": "@string(coalesce(activity('LoadNextForPromotion').output.value, json('[]')))",
+                "type": "Expression"
+              }
             }
           },
           {
-            "name": "ProcessChildren",
+            "name": "ResetNextFrontier",
+            "type": "WebActivity",
+            "dependsOn": [
+              {
+                "activity": "PromoteToCurrent",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "connectVia": {
+              "referenceName": "adf-managed-ir",
+              "type": "IntegrationRuntimeReference"
+            },
+            "policy": {
+              "retry": 3,
+              "retryIntervalInSeconds": 30
+            },
+            "typeProperties": {
+              "method": "PUT",
+              "url": {
+                "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.fileshareReconcileNextFrontierBlobName)",
+                "type": "Expression"
+              },
+              "headers": {
+                "x-ms-blob-type": "AppendBlob",
+                "x-ms-version": "2023-11-03",
+                "Content-Length": "0"
+              },
+              "authentication": {
+                "type": "MSI",
+                "resource": "https://storage.azure.com/"
+              }
+            }
+          },
+          {
+            "name": "LoadCurrentFrontier",
+            "type": "Lookup",
+            "dependsOn": [
+              {
+                "activity": "ResetNextFrontier",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "policy": {
+              "timeout": "0.00:05:00",
+              "retry": 2,
+              "retryIntervalInSeconds": 15
+            },
+            "typeProperties": {
+              "dataset": {
+                "referenceName": "fileshare_current_frontier",
+                "type": "DatasetReference"
+              },
+              "firstRowOnly": false
+            }
+          },
+          {
+            "name": "ProcessFrontier",
             "type": "ForEach",
             "dependsOn": [
               {
-                "activity": "GetDstChildren",
+                "activity": "LoadCurrentFrontier",
                 "dependencyConditions": [
                   "Succeeded"
                 ]
@@ -1725,2162 +1549,62 @@
             "typeProperties": {
               "isSequential": true,
               "items": {
-                "value": "@coalesce(activity('GetDstChildren').output.childItems, json('[]'))",
+                "value": "@coalesce(activity('LoadCurrentFrontier').output.value, json('[]'))",
                 "type": "Expression"
               },
               "activities": [
                 {
-                  "name": "ReReadCap",
-                  "type": "Lookup",
+                  "name": "RunWorker",
+                  "type": "ExecutePipeline",
                   "dependsOn": [],
-                  "policy": {
-                    "timeout": "0.00:05:00",
-                    "retry": 2,
-                    "retryIntervalInSeconds": 15
-                  },
                   "typeProperties": {
-                    "dataset": {
-                      "referenceName": "fileshare_cap_counter",
-                      "type": "DatasetReference"
+                    "pipeline": {
+                      "referenceName": "reconcilefilesharefolderworker",
+                      "type": "PipelineReference"
                     },
-                    "firstRowOnly": true
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFile",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(equals(toLower(item().type), 'file'), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFile",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_fileshare",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@pipeline().parameters.destFolderPath",
-                                "type": "Expression"
-                              },
-                              "fileName": {
-                                "value": "@item().name",
-                                "type": "Expression"
-                              }
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureFileStorageReadSettings",
-                            "recursive": false
-                          },
-                          "enableLogging": false
-                        }
+                    "waitOnCompletion": true,
+                    "parameters": {
+                      "sourceFolderPath": {
+                        "value": "@item().src",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFile",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFile",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFolder",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_fileshare",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name))",
-                                "type": "Expression"
-                              },
-                              "fileName": ""
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureFileStorageReadSettings",
-                            "recursive": true
-                          },
-                          "enableLogging": false
-                        }
+                      "destFolderPath": {
+                        "value": "@item().dst",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFolder",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFolder",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeRecurseFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "MaybeDeleteFile",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    },
-                    {
-                      "activity": "MaybeDeleteFolder",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "RecurseSubfolder",
-                        "type": "ExecutePipeline",
-                        "dependsOn": [],
-                        "typeProperties": {
-                          "pipeline": {
-                            "referenceName": "reconcilefilesharefolderlevel6",
-                            "type": "PipelineReference"
-                          },
-                          "waitOnCompletion": true,
-                          "parameters": {
-                            "sourceFolderPath": {
-                              "value": "@if(equals(pipeline().parameters.sourceFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.sourceFolderPath, '/', item().name))",
-                              "type": "Expression"
-                            },
-                            "destFolderPath": {
-                              "value": "@if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name))",
-                              "type": "Expression"
-                            },
-                            "capPerRun": {
-                              "value": "@pipeline().parameters.capPerRun",
-                              "type": "Expression"
-                            },
-                            "checkpointStorageAccountName": {
-                              "value": "@pipeline().parameters.checkpointStorageAccountName",
-                              "type": "Expression"
-                            },
-                            "checkpointContainerName": {
-                              "value": "@pipeline().parameters.checkpointContainerName",
-                              "type": "Expression"
-                            },
-                            "checkpointCurrentPrefix": {
-                              "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                              "type": "Expression"
-                            },
-                            "fileshareReconcileCapBlobName": {
-                              "value": "@pipeline().parameters.fileshareReconcileCapBlobName",
-                              "type": "Expression"
-                            }
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Microsoft.DataFactory/factories/pipelines",
-      "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconcilefilesharefolderlevel4')]",
-      "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/fileshare_cap_counter')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconcilefilesharefolderlevel5')]"
-      ],
-      "properties": {
-        "concurrency": 4,
-        "parameters": {
-          "sourceFolderPath": {
-            "type": "String"
-          },
-          "destFolderPath": {
-            "type": "String"
-          },
-          "capPerRun": {
-            "type": "Int"
-          },
-          "checkpointStorageAccountName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointStorageAccountName')]"
-          },
-          "checkpointContainerName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointContainerName')]"
-          },
-          "checkpointCurrentPrefix": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
-          },
-          "fileshareReconcileCapBlobName": {
-            "type": "String",
-            "defaultValue": "[parameters('fileshareReconcileCapBlobName')]"
-          }
-        },
-        "variables": {},
-        "activities": [
-          {
-            "name": "GetSrcChildren",
-            "type": "GetMetadata",
-            "dependsOn": [],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "source_fileshare",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.sourceFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "GetDstChildren",
-            "type": "GetMetadata",
-            "dependsOn": [
-              {
-                "activity": "GetSrcChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "dest_fileshare",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.destFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "ProcessChildren",
-            "type": "ForEach",
-            "dependsOn": [
-              {
-                "activity": "GetDstChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "isSequential": true,
-              "items": {
-                "value": "@coalesce(activity('GetDstChildren').output.childItems, json('[]'))",
-                "type": "Expression"
-              },
-              "activities": [
-                {
-                  "name": "ReReadCap",
-                  "type": "Lookup",
-                  "dependsOn": [],
-                  "policy": {
-                    "timeout": "0.00:05:00",
-                    "retry": 2,
-                    "retryIntervalInSeconds": 15
-                  },
-                  "typeProperties": {
-                    "dataset": {
-                      "referenceName": "fileshare_cap_counter",
-                      "type": "DatasetReference"
-                    },
-                    "firstRowOnly": true
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFile",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(equals(toLower(item().type), 'file'), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFile",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_fileshare",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@pipeline().parameters.destFolderPath",
-                                "type": "Expression"
-                              },
-                              "fileName": {
-                                "value": "@item().name",
-                                "type": "Expression"
-                              }
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureFileStorageReadSettings",
-                            "recursive": false
-                          },
-                          "enableLogging": false
-                        }
+                      "currentDepth": {
+                        "value": "@int(item().depth)",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFile",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFile",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFolder",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_fileshare",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name))",
-                                "type": "Expression"
-                              },
-                              "fileName": ""
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureFileStorageReadSettings",
-                            "recursive": true
-                          },
-                          "enableLogging": false
-                        }
+                      "maxDepth": {
+                        "value": "@pipeline().parameters.fileshareReconcileMaxDepth",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFolder",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFolder",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeRecurseFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "MaybeDeleteFile",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    },
-                    {
-                      "activity": "MaybeDeleteFolder",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "RecurseSubfolder",
-                        "type": "ExecutePipeline",
-                        "dependsOn": [],
-                        "typeProperties": {
-                          "pipeline": {
-                            "referenceName": "reconcilefilesharefolderlevel5",
-                            "type": "PipelineReference"
-                          },
-                          "waitOnCompletion": true,
-                          "parameters": {
-                            "sourceFolderPath": {
-                              "value": "@if(equals(pipeline().parameters.sourceFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.sourceFolderPath, '/', item().name))",
-                              "type": "Expression"
-                            },
-                            "destFolderPath": {
-                              "value": "@if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name))",
-                              "type": "Expression"
-                            },
-                            "capPerRun": {
-                              "value": "@pipeline().parameters.capPerRun",
-                              "type": "Expression"
-                            },
-                            "checkpointStorageAccountName": {
-                              "value": "@pipeline().parameters.checkpointStorageAccountName",
-                              "type": "Expression"
-                            },
-                            "checkpointContainerName": {
-                              "value": "@pipeline().parameters.checkpointContainerName",
-                              "type": "Expression"
-                            },
-                            "checkpointCurrentPrefix": {
-                              "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                              "type": "Expression"
-                            },
-                            "fileshareReconcileCapBlobName": {
-                              "value": "@pipeline().parameters.fileshareReconcileCapBlobName",
-                              "type": "Expression"
-                            }
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Microsoft.DataFactory/factories/pipelines",
-      "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconcilefilesharefolderlevel3')]",
-      "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/fileshare_cap_counter')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconcilefilesharefolderlevel4')]"
-      ],
-      "properties": {
-        "concurrency": 4,
-        "parameters": {
-          "sourceFolderPath": {
-            "type": "String"
-          },
-          "destFolderPath": {
-            "type": "String"
-          },
-          "capPerRun": {
-            "type": "Int"
-          },
-          "checkpointStorageAccountName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointStorageAccountName')]"
-          },
-          "checkpointContainerName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointContainerName')]"
-          },
-          "checkpointCurrentPrefix": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
-          },
-          "fileshareReconcileCapBlobName": {
-            "type": "String",
-            "defaultValue": "[parameters('fileshareReconcileCapBlobName')]"
-          }
-        },
-        "variables": {},
-        "activities": [
-          {
-            "name": "GetSrcChildren",
-            "type": "GetMetadata",
-            "dependsOn": [],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "source_fileshare",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.sourceFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "GetDstChildren",
-            "type": "GetMetadata",
-            "dependsOn": [
-              {
-                "activity": "GetSrcChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "dest_fileshare",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.destFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "ProcessChildren",
-            "type": "ForEach",
-            "dependsOn": [
-              {
-                "activity": "GetDstChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "isSequential": true,
-              "items": {
-                "value": "@coalesce(activity('GetDstChildren').output.childItems, json('[]'))",
-                "type": "Expression"
-              },
-              "activities": [
-                {
-                  "name": "ReReadCap",
-                  "type": "Lookup",
-                  "dependsOn": [],
-                  "policy": {
-                    "timeout": "0.00:05:00",
-                    "retry": 2,
-                    "retryIntervalInSeconds": 15
-                  },
-                  "typeProperties": {
-                    "dataset": {
-                      "referenceName": "fileshare_cap_counter",
-                      "type": "DatasetReference"
-                    },
-                    "firstRowOnly": true
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFile",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(equals(toLower(item().type), 'file'), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFile",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_fileshare",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@pipeline().parameters.destFolderPath",
-                                "type": "Expression"
-                              },
-                              "fileName": {
-                                "value": "@item().name",
-                                "type": "Expression"
-                              }
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureFileStorageReadSettings",
-                            "recursive": false
-                          },
-                          "enableLogging": false
-                        }
+                      "capPerRun": {
+                        "value": "@pipeline().parameters.deleteReconcileCapPerRun",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFile",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFile",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFolder",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_fileshare",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name))",
-                                "type": "Expression"
-                              },
-                              "fileName": ""
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureFileStorageReadSettings",
-                            "recursive": true
-                          },
-                          "enableLogging": false
-                        }
+                      "checkpointStorageAccountName": {
+                        "value": "@pipeline().parameters.checkpointStorageAccountName",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFolder",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFolder",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeRecurseFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "MaybeDeleteFile",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    },
-                    {
-                      "activity": "MaybeDeleteFolder",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "RecurseSubfolder",
-                        "type": "ExecutePipeline",
-                        "dependsOn": [],
-                        "typeProperties": {
-                          "pipeline": {
-                            "referenceName": "reconcilefilesharefolderlevel4",
-                            "type": "PipelineReference"
-                          },
-                          "waitOnCompletion": true,
-                          "parameters": {
-                            "sourceFolderPath": {
-                              "value": "@if(equals(pipeline().parameters.sourceFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.sourceFolderPath, '/', item().name))",
-                              "type": "Expression"
-                            },
-                            "destFolderPath": {
-                              "value": "@if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name))",
-                              "type": "Expression"
-                            },
-                            "capPerRun": {
-                              "value": "@pipeline().parameters.capPerRun",
-                              "type": "Expression"
-                            },
-                            "checkpointStorageAccountName": {
-                              "value": "@pipeline().parameters.checkpointStorageAccountName",
-                              "type": "Expression"
-                            },
-                            "checkpointContainerName": {
-                              "value": "@pipeline().parameters.checkpointContainerName",
-                              "type": "Expression"
-                            },
-                            "checkpointCurrentPrefix": {
-                              "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                              "type": "Expression"
-                            },
-                            "fileshareReconcileCapBlobName": {
-                              "value": "@pipeline().parameters.fileshareReconcileCapBlobName",
-                              "type": "Expression"
-                            }
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Microsoft.DataFactory/factories/pipelines",
-      "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconcilefilesharefolderlevel2')]",
-      "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/fileshare_cap_counter')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconcilefilesharefolderlevel3')]"
-      ],
-      "properties": {
-        "concurrency": 4,
-        "parameters": {
-          "sourceFolderPath": {
-            "type": "String"
-          },
-          "destFolderPath": {
-            "type": "String"
-          },
-          "capPerRun": {
-            "type": "Int"
-          },
-          "checkpointStorageAccountName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointStorageAccountName')]"
-          },
-          "checkpointContainerName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointContainerName')]"
-          },
-          "checkpointCurrentPrefix": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
-          },
-          "fileshareReconcileCapBlobName": {
-            "type": "String",
-            "defaultValue": "[parameters('fileshareReconcileCapBlobName')]"
-          }
-        },
-        "variables": {},
-        "activities": [
-          {
-            "name": "GetSrcChildren",
-            "type": "GetMetadata",
-            "dependsOn": [],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "source_fileshare",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.sourceFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "GetDstChildren",
-            "type": "GetMetadata",
-            "dependsOn": [
-              {
-                "activity": "GetSrcChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "dest_fileshare",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.destFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "ProcessChildren",
-            "type": "ForEach",
-            "dependsOn": [
-              {
-                "activity": "GetDstChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "isSequential": true,
-              "items": {
-                "value": "@coalesce(activity('GetDstChildren').output.childItems, json('[]'))",
-                "type": "Expression"
-              },
-              "activities": [
-                {
-                  "name": "ReReadCap",
-                  "type": "Lookup",
-                  "dependsOn": [],
-                  "policy": {
-                    "timeout": "0.00:05:00",
-                    "retry": 2,
-                    "retryIntervalInSeconds": 15
-                  },
-                  "typeProperties": {
-                    "dataset": {
-                      "referenceName": "fileshare_cap_counter",
-                      "type": "DatasetReference"
-                    },
-                    "firstRowOnly": true
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFile",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(equals(toLower(item().type), 'file'), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFile",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_fileshare",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@pipeline().parameters.destFolderPath",
-                                "type": "Expression"
-                              },
-                              "fileName": {
-                                "value": "@item().name",
-                                "type": "Expression"
-                              }
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureFileStorageReadSettings",
-                            "recursive": false
-                          },
-                          "enableLogging": false
-                        }
+                      "checkpointContainerName": {
+                        "value": "@pipeline().parameters.checkpointContainerName",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFile",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFile",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFolder",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_fileshare",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name))",
-                                "type": "Expression"
-                              },
-                              "fileName": ""
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureFileStorageReadSettings",
-                            "recursive": true
-                          },
-                          "enableLogging": false
-                        }
+                      "checkpointCurrentPrefix": {
+                        "value": "@pipeline().parameters.checkpointCurrentPrefix",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFolder",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFolder",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeRecurseFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "MaybeDeleteFile",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    },
-                    {
-                      "activity": "MaybeDeleteFolder",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "RecurseSubfolder",
-                        "type": "ExecutePipeline",
-                        "dependsOn": [],
-                        "typeProperties": {
-                          "pipeline": {
-                            "referenceName": "reconcilefilesharefolderlevel3",
-                            "type": "PipelineReference"
-                          },
-                          "waitOnCompletion": true,
-                          "parameters": {
-                            "sourceFolderPath": {
-                              "value": "@if(equals(pipeline().parameters.sourceFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.sourceFolderPath, '/', item().name))",
-                              "type": "Expression"
-                            },
-                            "destFolderPath": {
-                              "value": "@if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name))",
-                              "type": "Expression"
-                            },
-                            "capPerRun": {
-                              "value": "@pipeline().parameters.capPerRun",
-                              "type": "Expression"
-                            },
-                            "checkpointStorageAccountName": {
-                              "value": "@pipeline().parameters.checkpointStorageAccountName",
-                              "type": "Expression"
-                            },
-                            "checkpointContainerName": {
-                              "value": "@pipeline().parameters.checkpointContainerName",
-                              "type": "Expression"
-                            },
-                            "checkpointCurrentPrefix": {
-                              "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                              "type": "Expression"
-                            },
-                            "fileshareReconcileCapBlobName": {
-                              "value": "@pipeline().parameters.fileshareReconcileCapBlobName",
-                              "type": "Expression"
-                            }
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Microsoft.DataFactory/factories/pipelines",
-      "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconcilefilesharefolderlevel1')]",
-      "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/fileshare_cap_counter')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconcilefilesharefolderlevel2')]"
-      ],
-      "properties": {
-        "concurrency": 4,
-        "parameters": {
-          "sourceFolderPath": {
-            "type": "String"
-          },
-          "destFolderPath": {
-            "type": "String"
-          },
-          "capPerRun": {
-            "type": "Int"
-          },
-          "checkpointStorageAccountName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointStorageAccountName')]"
-          },
-          "checkpointContainerName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointContainerName')]"
-          },
-          "checkpointCurrentPrefix": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
-          },
-          "fileshareReconcileCapBlobName": {
-            "type": "String",
-            "defaultValue": "[parameters('fileshareReconcileCapBlobName')]"
-          }
-        },
-        "variables": {},
-        "activities": [
-          {
-            "name": "GetSrcChildren",
-            "type": "GetMetadata",
-            "dependsOn": [],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "source_fileshare",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.sourceFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "GetDstChildren",
-            "type": "GetMetadata",
-            "dependsOn": [
-              {
-                "activity": "GetSrcChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "dest_fileshare",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.destFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "ProcessChildren",
-            "type": "ForEach",
-            "dependsOn": [
-              {
-                "activity": "GetDstChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "isSequential": true,
-              "items": {
-                "value": "@coalesce(activity('GetDstChildren').output.childItems, json('[]'))",
-                "type": "Expression"
-              },
-              "activities": [
-                {
-                  "name": "ReReadCap",
-                  "type": "Lookup",
-                  "dependsOn": [],
-                  "policy": {
-                    "timeout": "0.00:05:00",
-                    "retry": 2,
-                    "retryIntervalInSeconds": 15
-                  },
-                  "typeProperties": {
-                    "dataset": {
-                      "referenceName": "fileshare_cap_counter",
-                      "type": "DatasetReference"
-                    },
-                    "firstRowOnly": true
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFile",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(equals(toLower(item().type), 'file'), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFile",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_fileshare",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@pipeline().parameters.destFolderPath",
-                                "type": "Expression"
-                              },
-                              "fileName": {
-                                "value": "@item().name",
-                                "type": "Expression"
-                              }
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureFileStorageReadSettings",
-                            "recursive": false
-                          },
-                          "enableLogging": false
-                        }
+                      "fileshareReconcileCapBlobName": {
+                        "value": "@pipeline().parameters.fileshareReconcileCapBlobName",
+                        "type": "Expression"
                       },
-                      {
-                        "name": "BumpCapAfterFile",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFile",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
+                      "fileshareReconcileNextFrontierBlobName": {
+                        "value": "@pipeline().parameters.fileshareReconcileNextFrontierBlobName",
+                        "type": "Expression"
                       }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
                     }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFolder",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_fileshare",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name))",
-                                "type": "Expression"
-                              },
-                              "fileName": ""
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureFileStorageReadSettings",
-                            "recursive": true
-                          },
-                          "enableLogging": false
-                        }
-                      },
-                      {
-                        "name": "BumpCapAfterFolder",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFolder",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeRecurseFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "MaybeDeleteFile",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    },
-                    {
-                      "activity": "MaybeDeleteFolder",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "RecurseSubfolder",
-                        "type": "ExecutePipeline",
-                        "dependsOn": [],
-                        "typeProperties": {
-                          "pipeline": {
-                            "referenceName": "reconcilefilesharefolderlevel2",
-                            "type": "PipelineReference"
-                          },
-                          "waitOnCompletion": true,
-                          "parameters": {
-                            "sourceFolderPath": {
-                              "value": "@if(equals(pipeline().parameters.sourceFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.sourceFolderPath, '/', item().name))",
-                              "type": "Expression"
-                            },
-                            "destFolderPath": {
-                              "value": "@if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name))",
-                              "type": "Expression"
-                            },
-                            "capPerRun": {
-                              "value": "@pipeline().parameters.capPerRun",
-                              "type": "Expression"
-                            },
-                            "checkpointStorageAccountName": {
-                              "value": "@pipeline().parameters.checkpointStorageAccountName",
-                              "type": "Expression"
-                            },
-                            "checkpointContainerName": {
-                              "value": "@pipeline().parameters.checkpointContainerName",
-                              "type": "Expression"
-                            },
-                            "checkpointCurrentPrefix": {
-                              "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                              "type": "Expression"
-                            },
-                            "fileshareReconcileCapBlobName": {
-                              "value": "@pipeline().parameters.fileshareReconcileCapBlobName",
-                              "type": "Expression"
-                            }
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Microsoft.DataFactory/factories/pipelines",
-      "apiVersion": "2018-06-01",
-      "name": "[concat(parameters('factoryName'), '/reconcilefilesharefolderlevel0')]",
-      "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/source_fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/dest_fileshare')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/fileshare_cap_counter')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconcilefilesharefolderlevel1')]"
-      ],
-      "properties": {
-        "concurrency": 4,
-        "parameters": {
-          "sourceFolderPath": {
-            "type": "String"
-          },
-          "destFolderPath": {
-            "type": "String"
-          },
-          "capPerRun": {
-            "type": "Int"
-          },
-          "checkpointStorageAccountName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointStorageAccountName')]"
-          },
-          "checkpointContainerName": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointContainerName')]"
-          },
-          "checkpointCurrentPrefix": {
-            "type": "String",
-            "defaultValue": "[parameters('checkpointCurrentPrefix')]"
-          },
-          "fileshareReconcileCapBlobName": {
-            "type": "String",
-            "defaultValue": "[parameters('fileshareReconcileCapBlobName')]"
-          }
-        },
-        "variables": {},
-        "activities": [
-          {
-            "name": "GetSrcChildren",
-            "type": "GetMetadata",
-            "dependsOn": [],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "source_fileshare",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.sourceFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "GetDstChildren",
-            "type": "GetMetadata",
-            "dependsOn": [
-              {
-                "activity": "GetSrcChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "dataset": {
-                "referenceName": "dest_fileshare",
-                "type": "DatasetReference",
-                "parameters": {
-                  "folderPath": {
-                    "value": "@pipeline().parameters.destFolderPath",
-                    "type": "Expression"
-                  },
-                  "fileName": ""
-                }
-              },
-              "fieldList": [
-                "childItems"
-              ]
-            }
-          },
-          {
-            "name": "ProcessChildren",
-            "type": "ForEach",
-            "dependsOn": [
-              {
-                "activity": "GetDstChildren",
-                "dependencyConditions": [
-                  "Succeeded"
-                ]
-              }
-            ],
-            "typeProperties": {
-              "isSequential": true,
-              "items": {
-                "value": "@coalesce(activity('GetDstChildren').output.childItems, json('[]'))",
-                "type": "Expression"
-              },
-              "activities": [
-                {
-                  "name": "ReReadCap",
-                  "type": "Lookup",
-                  "dependsOn": [],
-                  "policy": {
-                    "timeout": "0.00:05:00",
-                    "retry": 2,
-                    "retryIntervalInSeconds": 15
-                  },
-                  "typeProperties": {
-                    "dataset": {
-                      "referenceName": "fileshare_cap_counter",
-                      "type": "DatasetReference"
-                    },
-                    "firstRowOnly": true
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFile",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(equals(toLower(item().type), 'file'), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFile",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_fileshare",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@pipeline().parameters.destFolderPath",
-                                "type": "Expression"
-                              },
-                              "fileName": {
-                                "value": "@item().name",
-                                "type": "Expression"
-                              }
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureFileStorageReadSettings",
-                            "recursive": false
-                          },
-                          "enableLogging": false
-                        }
-                      },
-                      {
-                        "name": "BumpCapAfterFile",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFile",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeDeleteFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "ReReadCap",
-                      "dependencyConditions": [
-                        "Succeeded"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), not(contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item()))), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "DeleteOrphanFolder",
-                        "type": "Delete",
-                        "dependsOn": [],
-                        "policy": {
-                          "retry": 2,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "dataset": {
-                            "referenceName": "dest_fileshare",
-                            "type": "DatasetReference",
-                            "parameters": {
-                              "folderPath": {
-                                "value": "@if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name))",
-                                "type": "Expression"
-                              },
-                              "fileName": ""
-                            }
-                          },
-                          "storeSettings": {
-                            "type": "AzureFileStorageReadSettings",
-                            "recursive": true
-                          },
-                          "enableLogging": false
-                        }
-                      },
-                      {
-                        "name": "BumpCapAfterFolder",
-                        "type": "WebActivity",
-                        "dependsOn": [
-                          {
-                            "activity": "DeleteOrphanFolder",
-                            "dependencyConditions": [
-                              "Succeeded"
-                            ]
-                          }
-                        ],
-                        "connectVia": {
-                          "referenceName": "adf-managed-ir",
-                          "type": "IntegrationRuntimeReference"
-                        },
-                        "policy": {
-                          "retry": 3,
-                          "retryIntervalInSeconds": 30
-                        },
-                        "typeProperties": {
-                          "method": "PUT",
-                          "url": {
-                            "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
-                            "type": "Expression"
-                          },
-                          "headers": {
-                            "x-ms-blob-type": "BlockBlob",
-                            "x-ms-version": "2023-11-03",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "value": "@concat('{\"runId\":\"', activity('ReReadCap').output.firstRow.runId, '\",\"cap\":', string(activity('ReReadCap').output.firstRow.cap), ',\"deleteCount\":', string(add(int(activity('ReReadCap').output.firstRow.deleteCount), 1)), ',\"updatedUtc\":\"', utcNow(), '\"}')",
-                            "type": "Expression"
-                          },
-                          "authentication": {
-                            "type": "MSI",
-                            "resource": "https://storage.azure.com/"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "name": "MaybeRecurseFolder",
-                  "type": "IfCondition",
-                  "dependsOn": [
-                    {
-                      "activity": "MaybeDeleteFile",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    },
-                    {
-                      "activity": "MaybeDeleteFolder",
-                      "dependencyConditions": [
-                        "Succeeded",
-                        "Skipped"
-                      ]
-                    }
-                  ],
-                  "typeProperties": {
-                    "expression": {
-                      "value": "@and(and(or(equals(toLower(item().type), 'folder'), equals(toLower(item().type), 'directory')), contains(coalesce(activity('GetSrcChildren').output.childItems, json('[]')), item())), less(int(activity('ReReadCap').output.firstRow.deleteCount), pipeline().parameters.capPerRun))",
-                      "type": "Expression"
-                    },
-                    "ifTrueActivities": [
-                      {
-                        "name": "RecurseSubfolder",
-                        "type": "ExecutePipeline",
-                        "dependsOn": [],
-                        "typeProperties": {
-                          "pipeline": {
-                            "referenceName": "reconcilefilesharefolderlevel1",
-                            "type": "PipelineReference"
-                          },
-                          "waitOnCompletion": true,
-                          "parameters": {
-                            "sourceFolderPath": {
-                              "value": "@if(equals(pipeline().parameters.sourceFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.sourceFolderPath, '/', item().name))",
-                              "type": "Expression"
-                            },
-                            "destFolderPath": {
-                              "value": "@if(equals(pipeline().parameters.destFolderPath, '/'), concat('/', item().name), concat(pipeline().parameters.destFolderPath, '/', item().name))",
-                              "type": "Expression"
-                            },
-                            "capPerRun": {
-                              "value": "@pipeline().parameters.capPerRun",
-                              "type": "Expression"
-                            },
-                            "checkpointStorageAccountName": {
-                              "value": "@pipeline().parameters.checkpointStorageAccountName",
-                              "type": "Expression"
-                            },
-                            "checkpointContainerName": {
-                              "value": "@pipeline().parameters.checkpointContainerName",
-                              "type": "Expression"
-                            },
-                            "checkpointCurrentPrefix": {
-                              "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                              "type": "Expression"
-                            },
-                            "fileshareReconcileCapBlobName": {
-                              "value": "@pipeline().parameters.fileshareReconcileCapBlobName",
-                              "type": "Expression"
-                            }
-                          }
-                        }
-                      }
-                    ]
                   }
                 }
               ]
@@ -3894,8 +1618,10 @@
       "apiVersion": "2018-06-01",
       "name": "[concat(parameters('factoryName'), '/deletereconcilefilesharepipeline')]",
       "dependsOn": [
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconcilefilesharefolderlevel0')]",
-        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/fileshare_cap_counter')]"
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/pipelines/reconcilefilesharefrontierbatch')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/fileshare_cap_counter')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/fileshare_current_frontier')]",
+        "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'), '/datasets/fileshare_next_frontier')]"
       ],
       "properties": {
         "concurrency": 1,
@@ -3916,9 +1642,21 @@
             "type": "String",
             "defaultValue": "[parameters('fileshareReconcileCapBlobName')]"
           },
+          "fileshareReconcileCurrentFrontierBlobName": {
+            "type": "String",
+            "defaultValue": "[parameters('fileshareReconcileCurrentFrontierBlobName')]"
+          },
+          "fileshareReconcileNextFrontierBlobName": {
+            "type": "String",
+            "defaultValue": "[parameters('fileshareReconcileNextFrontierBlobName')]"
+          },
           "deleteReconcileCapPerRun": {
             "type": "Int",
             "defaultValue": "[parameters('deleteReconcileCapPerRun')]"
+          },
+          "fileshareReconcileMaxDepth": {
+            "type": "Int",
+            "defaultValue": "[parameters('fileshareReconcileMaxDepth')]"
           },
           "sourceFileshareFolderPath": {
             "type": "String",
@@ -3946,7 +1684,7 @@
             "typeProperties": {
               "method": "PUT",
               "url": {
-                "value": "@concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/', pipeline().parameters.fileshareReconcileCapBlobName)",
+                "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.fileshareReconcileCapBlobName)",
                 "type": "Expression"
               },
               "headers": {
@@ -3954,9 +1692,71 @@
                 "x-ms-version": "2023-11-03",
                 "Content-Type": "application/json"
               },
+              "authentication": {
+                "type": "MSI",
+                "resource": "https://storage.azure.com/"
+              },
               "body": {
                 "value": "@concat('{\"runId\":\"', pipeline().RunId, '\",\"cap\":', string(pipeline().parameters.deleteReconcileCapPerRun), ',\"deleteCount\":0,\"updatedUtc\":\"', utcNow(), '\"}')",
                 "type": "Expression"
+              }
+            }
+          },
+          {
+            "name": "InitCurrentFrontier",
+            "type": "WebActivity",
+            "dependsOn": [],
+            "connectVia": {
+              "referenceName": "adf-managed-ir",
+              "type": "IntegrationRuntimeReference"
+            },
+            "policy": {
+              "retry": 3,
+              "retryIntervalInSeconds": 30
+            },
+            "typeProperties": {
+              "method": "PUT",
+              "url": {
+                "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.fileshareReconcileCurrentFrontierBlobName)",
+                "type": "Expression"
+              },
+              "headers": {
+                "x-ms-blob-type": "BlockBlob",
+                "x-ms-version": "2023-11-03",
+                "Content-Type": "application/json"
+              },
+              "authentication": {
+                "type": "MSI",
+                "resource": "https://storage.azure.com/"
+              },
+              "body": {
+                "value": "@concat('[', ']')",
+                "type": "Expression"
+              }
+            }
+          },
+          {
+            "name": "InitNextFrontierBlob",
+            "type": "WebActivity",
+            "dependsOn": [],
+            "connectVia": {
+              "referenceName": "adf-managed-ir",
+              "type": "IntegrationRuntimeReference"
+            },
+            "policy": {
+              "retry": 3,
+              "retryIntervalInSeconds": 30
+            },
+            "typeProperties": {
+              "method": "PUT",
+              "url": {
+                "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.fileshareReconcileNextFrontierBlobName)",
+                "type": "Expression"
+              },
+              "headers": {
+                "x-ms-blob-type": "AppendBlob",
+                "x-ms-version": "2023-11-03",
+                "Content-Length": "0"
               },
               "authentication": {
                 "type": "MSI",
@@ -3965,52 +1765,169 @@
             }
           },
           {
-            "name": "RecurseRoot",
-            "type": "ExecutePipeline",
+            "name": "SeedRootIntoNextFrontier",
+            "type": "WebActivity",
+            "dependsOn": [
+              {
+                "activity": "InitNextFrontierBlob",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              }
+            ],
+            "connectVia": {
+              "referenceName": "adf-managed-ir",
+              "type": "IntegrationRuntimeReference"
+            },
+            "policy": {
+              "retry": 3,
+              "retryIntervalInSeconds": 30
+            },
+            "typeProperties": {
+              "method": "PUT",
+              "url": {
+                "value": "@concat(concat('https://', pipeline().parameters.checkpointStorageAccountName, '.blob.core.windows.net/', pipeline().parameters.checkpointContainerName, '/', pipeline().parameters.checkpointCurrentPrefix, '/'), pipeline().parameters.fileshareReconcileNextFrontierBlobName, '?comp=appendblock')",
+                "type": "Expression"
+              },
+              "headers": {
+                "x-ms-version": "2023-11-03",
+                "Content-Type": "application/json"
+              },
+              "authentication": {
+                "type": "MSI",
+                "resource": "https://storage.azure.com/"
+              },
+              "body": {
+                "value": "@concat('{\"src\":\"', pipeline().parameters.sourceFileshareFolderPath, '\",\"dst\":\"', pipeline().parameters.destFileshareFolderPath, '\",\"depth\":0}', uriComponentToString('%0A'))",
+                "type": "Expression"
+              }
+            }
+          },
+          {
+            "name": "WalkTree",
+            "type": "Until",
             "dependsOn": [
               {
                 "activity": "InitCapCounter",
                 "dependencyConditions": [
                   "Succeeded"
                 ]
+              },
+              {
+                "activity": "InitCurrentFrontier",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
+              },
+              {
+                "activity": "SeedRootIntoNextFrontier",
+                "dependencyConditions": [
+                  "Succeeded"
+                ]
               }
             ],
             "typeProperties": {
-              "pipeline": {
-                "referenceName": "reconcilefilesharefolderlevel0",
-                "type": "PipelineReference"
+              "expression": {
+                "value": "@or(equals(length(coalesce(activity('LoadNextFrontierForTermination').output.value, json('[]'))), 0), greaterOrEquals(int(activity('ReReadCapForTermination').output.firstRow.deleteCount), pipeline().parameters.deleteReconcileCapPerRun))",
+                "type": "Expression"
               },
-              "waitOnCompletion": true,
-              "parameters": {
-                "sourceFolderPath": {
-                  "value": "@pipeline().parameters.sourceFileshareFolderPath",
-                  "type": "Expression"
+              "timeout": "0.01:00:00",
+              "activities": [
+                {
+                  "name": "RunBatch",
+                  "type": "ExecutePipeline",
+                  "dependsOn": [],
+                  "typeProperties": {
+                    "pipeline": {
+                      "referenceName": "reconcilefilesharefrontierbatch",
+                      "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true,
+                    "parameters": {
+                      "checkpointStorageAccountName": {
+                        "value": "@pipeline().parameters.checkpointStorageAccountName",
+                        "type": "Expression"
+                      },
+                      "checkpointContainerName": {
+                        "value": "@pipeline().parameters.checkpointContainerName",
+                        "type": "Expression"
+                      },
+                      "checkpointCurrentPrefix": {
+                        "value": "@pipeline().parameters.checkpointCurrentPrefix",
+                        "type": "Expression"
+                      },
+                      "fileshareReconcileCapBlobName": {
+                        "value": "@pipeline().parameters.fileshareReconcileCapBlobName",
+                        "type": "Expression"
+                      },
+                      "fileshareReconcileCurrentFrontierBlobName": {
+                        "value": "@pipeline().parameters.fileshareReconcileCurrentFrontierBlobName",
+                        "type": "Expression"
+                      },
+                      "fileshareReconcileNextFrontierBlobName": {
+                        "value": "@pipeline().parameters.fileshareReconcileNextFrontierBlobName",
+                        "type": "Expression"
+                      },
+                      "deleteReconcileCapPerRun": {
+                        "value": "@pipeline().parameters.deleteReconcileCapPerRun",
+                        "type": "Expression"
+                      },
+                      "fileshareReconcileMaxDepth": {
+                        "value": "@pipeline().parameters.fileshareReconcileMaxDepth",
+                        "type": "Expression"
+                      }
+                    }
+                  }
                 },
-                "destFolderPath": {
-                  "value": "@pipeline().parameters.destFileshareFolderPath",
-                  "type": "Expression"
+                {
+                  "name": "ReReadCapForTermination",
+                  "type": "Lookup",
+                  "dependsOn": [
+                    {
+                      "activity": "RunBatch",
+                      "dependencyConditions": [
+                        "Succeeded"
+                      ]
+                    }
+                  ],
+                  "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 15
+                  },
+                  "typeProperties": {
+                    "dataset": {
+                      "referenceName": "fileshare_cap_counter",
+                      "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                  }
                 },
-                "capPerRun": {
-                  "value": "@pipeline().parameters.deleteReconcileCapPerRun",
-                  "type": "Expression"
-                },
-                "checkpointStorageAccountName": {
-                  "value": "@pipeline().parameters.checkpointStorageAccountName",
-                  "type": "Expression"
-                },
-                "checkpointContainerName": {
-                  "value": "@pipeline().parameters.checkpointContainerName",
-                  "type": "Expression"
-                },
-                "checkpointCurrentPrefix": {
-                  "value": "@pipeline().parameters.checkpointCurrentPrefix",
-                  "type": "Expression"
-                },
-                "fileshareReconcileCapBlobName": {
-                  "value": "@pipeline().parameters.fileshareReconcileCapBlobName",
-                  "type": "Expression"
+                {
+                  "name": "LoadNextFrontierForTermination",
+                  "type": "Lookup",
+                  "dependsOn": [
+                    {
+                      "activity": "ReReadCapForTermination",
+                      "dependencyConditions": [
+                        "Succeeded"
+                      ]
+                    }
+                  ],
+                  "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 2,
+                    "retryIntervalInSeconds": 15
+                  },
+                  "typeProperties": {
+                    "dataset": {
+                      "referenceName": "fileshare_next_frontier",
+                      "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                  }
                 }
-              }
+              ]
             }
           }
         ]

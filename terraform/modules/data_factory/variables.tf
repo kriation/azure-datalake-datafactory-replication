@@ -124,6 +124,24 @@ variable "adf_fileshare_reconcile_cap_blob_name" {
   default     = "fileshare-reconcile-cap.json"
 }
 
+variable "adf_fileshare_reconcile_current_frontier_blob_name" {
+  description = "Blob name for the BFS current-frontier work queue (file share reconcile)."
+  type        = string
+  default     = "fileshare-reconcile-current-frontier.json"
+}
+
+variable "adf_fileshare_reconcile_next_frontier_blob_name" {
+  description = "Blob name for the BFS next-frontier work queue (file share reconcile)."
+  type        = string
+  default     = "fileshare-reconcile-next-frontier.json"
+}
+
+variable "adf_fileshare_reconcile_max_depth" {
+  description = "Maximum recursion depth at which child subfolders are individually enqueued for reconcile."
+  type        = number
+  default     = 32
+}
+
 variable "adf_datalake_reconcile_cap_blob_name" {
   description = "Blob name for the per-run delete reconciliation cap counter (Data Lake Gen2)."
   type        = string
